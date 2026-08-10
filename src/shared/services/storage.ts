@@ -9,16 +9,22 @@ import type {
   FavoriteVideo,
   RecentVideo,
   PracticeStats,
+  PracticePhrase,
+  PhraseAttempt,
 } from "@/shared/types/models";
 import { practiceSessionsSchema } from "@/shared/lib/schemas/practiceSession";
 import { favoriteVideosSchema } from "@/shared/lib/schemas/favoriteVideo";
 import { recentVideosSchema } from "@/shared/lib/schemas/recentVideo";
+import { practicePhrasesSchema } from "@/shared/lib/schemas/practicePhrase";
+import { phraseAttemptsSchema } from "@/shared/lib/schemas/phraseAttempt";
 
 /** ストレージキーの定義 */
 const STORAGE_KEYS = {
   PRACTICE_SESSIONS: "@guitar_lovers/practice_sessions",
   FAVORITE_VIDEOS: "@guitar_lovers/favorite_videos",
   RECENT_VIDEOS: "@guitar_lovers/recent_videos",
+  PRACTICE_PHRASES: "@guitar_lovers/practice_phrases",
+  PHRASE_ATTEMPTS: "@guitar_lovers/phrase_attempts",
 } as const;
 
 /** 最近視聴した動画の最大保持数 */
@@ -324,4 +330,123 @@ export async function getWeeklyData(weeksAgo = 0): Promise<number[]> {
   });
 
   return weeklyData;
+}
+
+// ============================================================
+// 練習フレーズ
+// ============================================================
+
+/**
+ * 全練習フレーズを取得する
+ */
+export async function getPracticePhrases(): Promise<PracticePhrase[]> {
+  try {
+    const json = await AsyncStorage.getItem(STORAGE_KEYS.PRACTICE_PHRASES);
+    if (!json) return [];
+    const parsed = practicePhrasesSchema.safeParse(JSON.parse(json));
+    if (!parsed.success) {
+      console.error("[storage] practice_phrasesの復元に失敗", parsed.error);
+      return [];
+    }
+    return parsed.data;
+  } catch (e) {
+    console.error("[storage] practice_phrasesの読み込みエラー", e);
+    return [];
+  }
+}
+
+/**
+ * 練習フレーズを保存する
+ * @param phrase - 保存するフレーズ
+ */
+export async function savePracticePhrase(
+  phrase: PracticePhrase
+): Promise<void> {
+  const phrases = await getPracticePhrases();
+  phrases.unshift(phrase);
+  await AsyncStorage.setItem(
+    STORAGE_KEYS.PRACTICE_PHRASES,
+    JSON.stringify(phrases)
+  );
+}
+
+/**
+ * 練習フレーズを更新する
+ * @param id - 更新するフレーズのID
+ * @param patch - 更新するフィールドの差分
+ */
+export async function updatePracticePhrase(
+  id: string,
+  patch: Partial<Omit<PracticePhrase, "id">>
+): Promise<void> {
+  const phrases = await getPracticePhrases();
+  const updated = phrases.map((p) =>
+    p.id === id ? { ...p, ...patch } : p
+  );
+  await AsyncStorage.setItem(
+    STORAGE_KEYS.PRACTICE_PHRASES,
+    JSON.stringify(updated)
+  );
+}
+
+/**
+ * 指定IDの練習フレーズを削除する
+ * @param id - 削除するフレーズのID
+ */
+export async function deletePracticePhrase(id: string): Promise<void> {
+  const phrases = await getPracticePhrases();
+  const updated = phrases.filter((p) => p.id !== id);
+  await AsyncStorage.setItem(
+    STORAGE_KEYS.PRACTICE_PHRASES,
+    JSON.stringify(updated)
+  );
+}
+
+// ============================================================
+// フレーズ練習結果
+// ============================================================
+
+/**
+ * 全フレーズ練習結果を取得する
+ */
+export async function getPhraseAttempts(): Promise<PhraseAttempt[]> {
+  try {
+    const json = await AsyncStorage.getItem(STORAGE_KEYS.PHRASE_ATTEMPTS);
+    if (!json) return [];
+    const parsed = phraseAttemptsSchema.safeParse(JSON.parse(json));
+    if (!parsed.success) {
+      console.error("[storage] phrase_attemptsの復元に失敗", parsed.error);
+      return [];
+    }
+    return parsed.data;
+  } catch (e) {
+    console.error("[storage] phrase_attemptsの読み込みエラー", e);
+    return [];
+  }
+}
+
+/**
+ * フレーズ練習結果を保存する
+ * @param attempt - 保存する練習結果
+ */
+export async function savePhraseAttempt(
+  attempt: PhraseAttempt
+): Promise<void> {
+  const attempts = await getPhraseAttempts();
+  attempts.unshift(attempt);
+  await AsyncStorage.setItem(
+    STORAGE_KEYS.PHRASE_ATTEMPTS,
+    JSON.stringify(attempts)
+  );
+}
+
+/**
+ * 指定フレーズの練習結果一覧を新しい順に取得する
+ * @param phraseId - 対象フレーズのID
+ */
+export async function getAttemptsByPhrase(
+  phraseId: string
+): Promise<PhraseAttempt[]> {
+  const attempts = await getPhraseAttempts();
+  return attempts.filter((a) => a.phraseId === phraseId);
 }

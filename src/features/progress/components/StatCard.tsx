@@ -1,59 +1,64 @@
+/**
+ * 統計カード（Stitch modern_2 風）
+ *
+ * 中央寄せの小さなラベル + 大きな primary 値。
+ */
+
 import { View, Text, StyleSheet } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
-import { colors } from "@/shared/constants/colors";
+import { colors } from "@/shared/theme";
 
 type Props = {
   label: string;
   value: string;
-  icon: string;
-  accentColor?: string;
 };
 
-/** 統計カードコンポーネント */
-export function StatCard({
-  label,
-  value,
-  icon,
-  accentColor = colors.primary,
-}: Props) {
+export function StatCard({ label, value }: Props) {
   return (
     <View
-      style={styles.card}
+      className="bg-surface-container-lowest"
+      style={[styles.card, shadowStyle]}
       accessibilityLabel={`${label}: ${value}`}
     >
-      <View
-        style={[styles.iconWrap, { backgroundColor: accentColor + "22" }]}
+      <Text
+        className="text-label-sm"
+        style={{
+          color: colors.outline,
+          letterSpacing: 0.5,
+          fontWeight: "600",
+          marginBottom: 4,
+        }}
       >
-        <Ionicons name={icon as never} size={20} color={accentColor} />
-      </View>
-      <Text style={styles.value}>{value}</Text>
-      <Text style={styles.label}>{label}</Text>
+        {label}
+      </Text>
+      <Text
+        style={{
+          color: colors.primary,
+          fontSize: 24,
+          fontWeight: "700",
+          lineHeight: 28,
+          fontVariant: ["tabular-nums"],
+        }}
+      >
+        {value}
+      </Text>
     </View>
   );
 }
 
+const shadowStyle = {
+  shadowColor: "#000",
+  shadowOpacity: 0.04,
+  shadowRadius: 12,
+  shadowOffset: { width: 0, height: 4 },
+  elevation: 2,
+};
+
 const styles = StyleSheet.create({
   card: {
-    width: "47.5%",
-    borderRadius: 14,
-    padding: 14,
-    gap: 6,
-    backgroundColor: colors.bgLightDark,
-  },
-  iconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    flex: 1,
+    minWidth: 0,
+    padding: 16,
+    borderRadius: 16,
     alignItems: "center",
-    justifyContent: "center",
-  },
-  value: {
-    color: colors.textWhite,
-    fontSize: 20,
-    fontWeight: "700",
-  },
-  label: {
-    color: colors.textGray,
-    fontSize: 12,
   },
 });

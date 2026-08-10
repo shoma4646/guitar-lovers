@@ -1,31 +1,38 @@
 /**
- * 履歴画面
- * 練習記録の統計・週次バーチャート・セッション一覧・新規記録追加を提供する。
+ * 進捗画面（Stitch modern_2 風のレイアウトを踏襲）
+ *
+ * - AppBar: プロフィール + "練習の記録" + settings
+ * - フレーズの上達（BPM推移）: 保存済みフレーズがある場合のみ表示、最上段の主役
+ * - 統計グリッド: Hours / Days / Songs / Streak の 2x2 カード
+ * - WEEKLY RHYTHM バーチャート
+ * - RECENT SESSIONS リスト
+ * - FAB（右下に追加ボタン）
  */
 
 import React, { useState, useCallback, useMemo } from "react";
 import {
   View,
   Text,
-  TouchableOpacity,
+  Pressable,
   ScrollView,
   Share,
   StyleSheet,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Ionicons } from "@expo/vector-icons";
-import { colors } from "@/shared/constants/colors";
+import { Icon } from "@/shared/components/atoms/Icon";
+import { colors } from "@/shared/theme";
 import type { PracticeSession, PracticeStats } from "@/shared/types/models";
 import { ErrorBoundary } from "@/shared/components/molecules/ErrorBoundary";
-import { usePracticeSessions } from "@/features/history/api/usePracticeSessions";
-import { useSavePracticeSession } from "@/features/history/api/useSavePracticeSession";
-import { useDeletePracticeSession } from "@/features/history/api/useDeletePracticeSession";
-import { calcStats } from "@/features/history/lib/calcStats";
-import { formatDurationLong } from "@/features/history/lib/formatters";
-import { StatCard } from "@/features/history/components/StatCard";
-import { WeekBarChart } from "@/features/history/components/WeekBarChart";
-import { SessionRow } from "@/features/history/components/SessionRow";
-import { AddSessionModal } from "@/features/history/components/AddSessionModal";
+import { usePracticeSessions } from "@/features/progress/api/usePracticeSessions";
+import { useSavePracticeSession } from "@/features/progress/api/useSavePracticeSession";
+import { useDeletePracticeSession } from "@/features/progress/api/useDeletePracticeSession";
+import { calcStats } from "@/features/progress/lib/calcStats";
+import { formatDurationLong } from "@/features/progress/lib/formatters";
+import { StatCard } from "@/features/progress/components/StatCard";
+import { WeekBarChart } from "@/features/progress/components/WeekBarChart";
+import { SessionRow } from "@/features/progress/components/SessionRow";
+import { AddSessionModal } from "@/features/progress/components/AddSessionModal";
+import { PhraseProgressList } from "@/features/progress/components/PhraseProgressList";
 
 const INITIAL_STATS: PracticeStats = {
   weeklyDuration: 0,
@@ -35,8 +42,7 @@ const INITIAL_STATS: PracticeStats = {
   weeklyData: [0, 0, 0, 0, 0, 0, 0],
 };
 
-/** 履歴画面コンポーネント */
-export function HistoryScreen() {
+export function ProgressScreen() {
   const { data: sessions = [] } = usePracticeSessions();
   const { mutateAsync: saveSession } = useSavePracticeSession();
   const { mutateAsync: deleteSession } = useDeletePracticeSession();
@@ -73,98 +79,119 @@ export function HistoryScreen() {
     try {
       await Share.share({ message: text, title: "練習記録をシェア" });
     } catch {
-      // シェアがキャンセルされた場合は何もしない
+      // ignore
     }
   }, [stats]);
 
   return (
     <ErrorBoundary>
-      <SafeAreaView style={styles.container} edges={["bottom"]}>
+      <SafeAreaView edges={["top"]} className="flex-1 bg-surface">
+        {/* Top App Bar */}
+        <View className="flex-row items-center justify-between px-margin-mobile h-16">
+          <View className="flex-row items-center" style={{ gap: 12 }}>
+            <View className="w-10 h-10 rounded-full bg-surface-container-highest items-center justify-center">
+              <Icon name="school" size={20} color={colors.onSurfaceVariant} />
+            </View>
+            <Text className="font-bold text-headline-lg text-on-surface">
+              練習の記録
+            </Text>
+          </View>
+          <Pressable
+            onPress={handleShare}
+            className="active:opacity-70"
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="練習記録をシェア"
+          >
+            <Icon name="share" size={22} color={colors.onSurfaceVariant} />
+          </Pressable>
+        </View>
+
         <ScrollView
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
+          {/* フレーズの上達（BPM推移） */}
+          <PhraseProgressList />
+
+          {/* Stats Grid (2x2) */}
           <View style={styles.statsGrid}>
-            <StatCard
-              label="今週の練習"
-              value={formatDurationLong(stats.weeklyDuration)}
-              icon="calendar-outline"
-              accentColor={colors.primary}
-            />
-            <StatCard
-              label="連続日数"
-              value={`${stats.streakDays}日`}
-              icon="flame-outline"
-              accentColor={colors.secondary}
-            />
-            <StatCard
-              label="累計時間"
-              value={formatDurationLong(stats.totalDuration)}
-              icon="time-outline"
-              accentColor={colors.tuned}
-            />
-            <StatCard
-              label="総回数"
-              value={`${stats.totalSessions}回`}
-              icon="musical-notes-outline"
-              accentColor={colors.error}
-            />
+            <View className="flex-row" style={{ gap: 12 }}>
+              <StatCard
+                label="HOURS"
+                value={formatDurationLong(stats.totalDuration)}
+              />
+              <StatCard label="DAYS" value={`${stats.streakDays}`} />
+              <StatCard label="SESSIONS" value={`${stats.totalSessions}`} />
+            </View>
+            <View className="flex-row" style={{ gap: 12, marginTop: 12 }}>
+              <StatCard
+                label="THIS WEEK"
+                value={formatDurationLong(stats.weeklyDuration)}
+              />
+            </View>
           </View>
 
-          <WeekBarChart weeklyData={stats.weeklyData} />
+          {/* Weekly Rhythm Chart */}
+          <View style={{ marginBottom: 24 }}>
+            <WeekBarChart weeklyData={stats.weeklyData} />
+          </View>
 
-          <TouchableOpacity
-            onPress={handleShare}
-            style={styles.shareButton}
-            accessibilityRole="button"
-            accessibilityLabel="練習記録をシェア"
+          {/* Recent Sessions */}
+          <Text
+            className="text-label-sm mb-sm"
+            style={{
+              color: colors.outline,
+              letterSpacing: 1.2,
+              textTransform: "uppercase",
+              fontWeight: "600",
+              paddingHorizontal: 4,
+            }}
           >
-            <Ionicons
-              name="share-social-outline"
-              size={18}
-              color={colors.secondary}
-            />
-            <Text style={styles.shareButtonText}>練習記録をシェア</Text>
-          </TouchableOpacity>
-
-          <View style={styles.section}>
-            <Text style={styles.sectionLabel}>
-              練習記録 ({sessions.length})
-            </Text>
-            {sessions.length === 0 ? (
-              <View style={styles.emptyState}>
-                <Ionicons
-                  name="musical-notes-outline"
-                  size={40}
-                  color={colors.textGray}
+            RECENT SESSIONS
+          </Text>
+          {sessions.length === 0 ? (
+            <View
+              className="bg-surface-container-lowest items-center"
+              style={[styles.emptyState, shadowStyle]}
+            >
+              <Icon name="music_note" size={40} color={colors.outline} />
+              <Text
+                className="text-headline-lg mt-md"
+                style={{ color: colors.onSurface, fontWeight: "700" }}
+              >
+                練習記録がありません
+              </Text>
+              <Text
+                className="text-body-md mt-xs"
+                style={{ color: colors.onSurfaceVariant, textAlign: "center" }}
+              >
+                右下のボタンから記録を追加してください
+              </Text>
+            </View>
+          ) : (
+            <View style={{ gap: 12 }}>
+              {sessions.map((session) => (
+                <SessionRow
+                  key={session.id}
+                  session={session}
+                  onDelete={handleDelete}
                 />
-                <Text style={styles.emptyText}>練習記録がありません</Text>
-                <Text style={styles.emptySubText}>
-                  右下のボタンから記録を追加してください
-                </Text>
-              </View>
-            ) : (
-              <View style={styles.list}>
-                {sessions.map((session) => (
-                  <SessionRow
-                    key={session.id}
-                    session={session}
-                    onDelete={handleDelete}
-                  />
-                ))}
-              </View>
-            )}
-          </View>
+              ))}
+            </View>
+          )}
         </ScrollView>
 
-        <TouchableOpacity
+        {/* Floating Action Button */}
+        <Pressable
           onPress={() => setShowAddModal(true)}
-          style={styles.fab}
+          className="active:scale-90"
+          style={[styles.fab, fabShadow]}
           accessibilityRole="button"
           accessibilityLabel="練習を記録する"
         >
-          <Ionicons name="add" size={28} color={colors.textWhite} />
-        </TouchableOpacity>
+          <Icon name="add" size={28} color={colors.onPrimary} />
+        </Pressable>
 
         <AddSessionModal
           visible={showAddModal}
@@ -176,84 +203,45 @@ export function HistoryScreen() {
   );
 }
 
+const shadowStyle = {
+  shadowColor: "#000",
+  shadowOpacity: 0.04,
+  shadowRadius: 12,
+  shadowOffset: { width: 0, height: 4 },
+  elevation: 2,
+};
+
+const fabShadow = {
+  shadowColor: "#000",
+  shadowOpacity: 0.2,
+  shadowRadius: 16,
+  shadowOffset: { width: 0, height: 6 },
+  elevation: 8,
+};
+
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.bgDark,
-  },
   scrollContent: {
-    padding: 16,
-    paddingBottom: 100,
+    paddingHorizontal: 20,
+    paddingBottom: 120,
   },
   statsGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 10,
-    marginBottom: 16,
-  },
-  shareButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    paddingVertical: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    marginBottom: 20,
-    backgroundColor: colors.bgLightDark,
-    borderColor: colors.secondary,
-  },
-  shareButtonText: {
-    color: colors.secondary,
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  section: {
-    gap: 8,
-  },
-  sectionLabel: {
-    color: colors.textGray,
-    fontSize: 12,
-    fontWeight: "600",
-    letterSpacing: 0.5,
-    textTransform: "uppercase",
-  },
-  list: {
-    gap: 8,
+    marginBottom: 24,
   },
   emptyState: {
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 14,
     paddingVertical: 40,
-    paddingHorizontal: 16,
-    gap: 10,
-    backgroundColor: colors.bgLightDark,
-  },
-  emptyText: {
-    color: colors.textGray,
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  emptySubText: {
-    color: colors.textGray + "AA",
-    fontSize: 13,
-    textAlign: "center",
+    paddingHorizontal: 24,
+    borderRadius: 16,
+    alignItems: "center",
   },
   fab: {
     position: "absolute",
-    right: 20,
-    bottom: 28,
+    right: 24,
+    bottom: 100,
     width: 56,
     height: 56,
     borderRadius: 28,
     alignItems: "center",
     justifyContent: "center",
-    elevation: 4,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    backgroundColor: colors.primary,
+    backgroundColor: "#ae3026",
   },
 });

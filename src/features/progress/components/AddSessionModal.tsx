@@ -10,7 +10,8 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { randomUUID } from "expo-crypto";
-import { colors } from "@/shared/constants/colors";
+import { colors } from "@/shared/theme/colors";
+import { fontSize, fontWeight, spacing, radius } from "@/shared/theme";
 import type { PracticeSession } from "@/shared/types/models";
 
 type Props = {
@@ -111,55 +112,55 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
   },
   sheet: {
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 20,
-    paddingBottom: 40,
-    gap: 12,
-    backgroundColor: colors.bgLightDark,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: spacing.xl,
+    paddingBottom: spacing["4xl"],
+    gap: spacing.md,
+    backgroundColor: colors.surfaceCard,
   },
   header: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 4,
+    marginBottom: spacing.xs,
   },
   title: {
-    color: colors.textWhite,
-    fontSize: 18,
-    fontWeight: "700",
+    color: colors.textPrimary,
+    fontSize: fontSize.headingMd,
+    fontWeight: fontWeight.bold,
   },
   inputLabel: {
-    color: colors.textGray,
-    fontSize: 12,
-    fontWeight: "600",
+    color: colors.textMuted,
+    fontSize: fontSize.bodyXs,
+    fontWeight: fontWeight.semibold,
     letterSpacing: 0.5,
     textTransform: "uppercase",
   },
   input: {
-    borderRadius: 10,
+    borderRadius: radius.md,
     paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 16,
-    backgroundColor: colors.bgGray,
-    color: colors.textWhite,
+    paddingVertical: spacing.md,
+    fontSize: fontSize.headingSm,
+    backgroundColor: colors.surfaceMuted,
+    color: colors.textPrimary,
   },
   textarea: {
     height: 80,
     textAlignVertical: "top",
-    paddingTop: 12,
+    paddingTop: spacing.md,
   },
   saveButton: {
-    height: 50,
-    borderRadius: 14,
+    height: 52,
+    borderRadius: radius.pill,
     alignItems: "center",
     justifyContent: "center",
-    marginTop: 4,
-    backgroundColor: colors.primary,
+    marginTop: spacing.sm,
+    backgroundColor: colors.brand,
   },
   saveButtonText: {
-    color: colors.textWhite,
-    fontSize: 16,
-    fontWeight: "700",
+    color: colors.textOnBrand,
+    fontSize: fontSize.headingSm,
+    fontWeight: fontWeight.bold,
   },
 });

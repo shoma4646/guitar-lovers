@@ -1,6 +1,6 @@
 import { Component, ReactNode } from "react";
 import { View, Text, TouchableOpacity, ScrollView } from "react-native";
-import { colors } from "@/shared/constants/colors";
+import { colors } from "@/shared/theme/colors";
 
 type Props = {
   children: ReactNode;
@@ -35,19 +35,19 @@ export class ErrorBoundary extends Component<Props, State> {
 
     return (
       <ScrollView
-        style={{ flex: 1, backgroundColor: colors.bgDark }}
+        style={{ flex: 1, backgroundColor: colors.surface }}
         contentContainerStyle={{
           padding: 24,
           paddingTop: 80,
           alignItems: "center",
         }}
       >
-        <Text style={{ color: colors.textWhite, fontSize: 20, fontWeight: "700" }}>
+        <Text style={{ color: colors.textPrimary, fontSize: 20, fontWeight: "700" }}>
           問題が発生しました
         </Text>
         <Text
           style={{
-            color: colors.textGray,
+            color: colors.textMuted,
             fontSize: 13,
             marginTop: 12,
             textAlign: "center",
@@ -62,10 +62,10 @@ export class ErrorBoundary extends Component<Props, State> {
             width: "100%",
             borderRadius: 16,
             padding: 16,
-            backgroundColor: colors.bgLightDark,
+            backgroundColor: colors.surfaceCard,
           }}
         >
-          <Text style={{ color: colors.textGray, fontSize: 12 }}>
+          <Text style={{ color: colors.textMuted, fontSize: 12 }}>
             {error.message || String(error)}
           </Text>
         </View>
@@ -74,15 +74,15 @@ export class ErrorBoundary extends Component<Props, State> {
           style={{
             marginTop: 32,
             alignItems: "center",
-            borderRadius: 16,
+            borderRadius: 999,
             paddingHorizontal: 32,
             paddingVertical: 16,
-            backgroundColor: colors.primary,
+            backgroundColor: colors.brand,
           }}
           onPress={this.reset}
           activeOpacity={0.8}
         >
-          <Text style={{ color: colors.textWhite, fontSize: 16, fontWeight: "500" }}>
+          <Text style={{ color: colors.textOnBrand, fontSize: 16, fontWeight: "600" }}>
             もう一度試す
           </Text>
         </TouchableOpacity>

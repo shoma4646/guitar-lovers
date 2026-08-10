@@ -1,108 +1,99 @@
 /**
  * タブナビゲーションレイアウト
- * アプリの4つのメインタブ（チューナー・練習・記録・ニュース）を定義する
+ *
+ * Stitch DESIGN.md（modern_guitarist）準拠:
+ * - 下部タブバー: warm surface 背景 + outline-variant の細い上罫線
+ * - アクティブタブ: primary-container を 10% 透過した pill 背景 + primary 色
+ * - 非アクティブタブ: outline 色
+ * - ラベル: label-sm (13px / 600)
+ * - 上部ヘッダーは画面ごとに自前で描画する（Stitch では画面によりレイアウトが異なるため）
  */
 
 import { Tabs } from "expo-router";
-import { Ionicons } from "@expo/vector-icons";
-import { colors } from "@/shared/constants/colors";
+import { View } from "react-native";
+import { Icon, IconName } from "@/shared/components/atoms/Icon";
+import { colors, textStyles } from "@/shared/theme";
 
-/** タブアイコンのサイズ */
 const ICON_SIZE = 24;
 
 /**
- * タブレイアウトコンポーネント
- * 各タブのアイコン・ラベル・ヘッダースタイルを設定する
+ * pill 形状のアイコン背景
+ *
+ * アクティブ時は primary 色の薄い背景に primary 色のアイコン、
+ * 非アクティブ時は背景なし + outline 色のアイコン。
  */
+function TabIcon({
+  name,
+  focused,
+}: {
+  name: IconName;
+  focused: boolean;
+}) {
+  return (
+    <View
+      style={{
+        paddingHorizontal: focused ? 16 : 0,
+        paddingVertical: focused ? 6 : 0,
+        borderRadius: 9999,
+        backgroundColor: focused
+          ? `${colors.primaryContainer}1A` // 10% 透過
+          : "transparent",
+      }}
+    >
+      <Icon
+        name={name}
+        size={ICON_SIZE}
+        color={focused ? colors.primary : colors.outline}
+      />
+    </View>
+  );
+}
+
 export default function TabLayout() {
   return (
     <Tabs
       screenOptions={{
-        // タブバースタイル
+        headerShown: false,
         tabBarStyle: {
-          backgroundColor: colors.bgDark,
-          borderTopColor: colors.bgGray,
+          backgroundColor: colors.surface,
+          borderTopColor: colors.outlineVariant,
           borderTopWidth: 1,
-          height: 60,
-          paddingBottom: 8,
-          paddingTop: 4,
+          height: 80,
+          paddingTop: 8,
+          paddingBottom: 24,
         },
         tabBarActiveTintColor: colors.primary,
-        tabBarInactiveTintColor: colors.textGray,
+        tabBarInactiveTintColor: colors.outline,
         tabBarLabelStyle: {
-          fontSize: 11,
-          fontWeight: "600",
+          ...textStyles.labelSm,
+          marginTop: 4,
         },
-        // ヘッダースタイル（全タブ共通）
-        headerStyle: {
-          backgroundColor: colors.bgDark,
-        },
-        headerTintColor: colors.textWhite,
-        headerTitleStyle: {
-          fontWeight: "700",
-          fontSize: 18,
-          color: colors.textWhite,
-        },
-        headerShadowVisible: false,
-        headerTitle: "Guitar Lovers",
       }}
     >
-      {/* チューナータブ */}
-      <Tabs.Screen
-        name="tuner"
-        options={{
-          title: "チューナー",
-          tabBarIcon: ({ color, focused }) => (
-            <Ionicons
-              name={focused ? "musical-note" : "musical-note-outline"}
-              size={ICON_SIZE}
-              color={color}
-            />
-          ),
-        }}
-      />
-
-      {/* 練習タブ */}
       <Tabs.Screen
         name="practice"
         options={{
-          title: "練習",
-          tabBarIcon: ({ color, focused }) => (
-            <Ionicons
-              name={focused ? "play-circle" : "play-circle-outline"}
-              size={ICON_SIZE}
-              color={color}
-            />
+          title: "Practice",
+          tabBarIcon: ({ focused }) => (
+            <TabIcon name="timer" focused={focused} />
           ),
         }}
       />
-
-      {/* 記録タブ */}
       <Tabs.Screen
-        name="history"
+        name="progress"
         options={{
-          title: "記録",
-          tabBarIcon: ({ color, focused }) => (
-            <Ionicons
-              name={focused ? "time" : "time-outline"}
-              size={ICON_SIZE}
-              color={color}
-            />
+          title: "Progress",
+          tabBarIcon: ({ focused }) => (
+            <TabIcon name="history" focused={focused} />
           ),
         }}
       />
-
-      {/* ニュースタブ */}
       <Tabs.Screen
-        name="news"
+        name="tuner"
         options={{
-          title: "ニュース",
-          tabBarIcon: ({ color, focused }) => (
-            <Ionicons
-              name={focused ? "newspaper" : "newspaper-outline"}
-              size={ICON_SIZE}
-              color={color}
-            />
+          title: "Tuner",
+          tabBarIcon: ({ focused }) => (
+            <TabIcon name="tune" focused={focused} />
           ),
         }}
       />

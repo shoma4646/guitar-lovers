@@ -1,5 +1,5 @@
-import { HistoryScreen } from "@/features/history/screens/HistoryScreen";
+import { ProgressScreen } from "@/features/progress/screens/ProgressScreen";
 
-export default function History() {
-  return <HistoryScreen />;
+export default function Progress() {
+  return <ProgressScreen />;
 }

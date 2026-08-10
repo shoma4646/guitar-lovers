@@ -1,38 +1,34 @@
 /**
  * アプリルートレイアウト
- * Expo RouterのStackナビゲーションとグローバルスタイルを設定する
+ *
+ * Stitch DESIGN.md（modern_guitarist）準拠の warm off-white 背景に統一する。
+ * Stack ヘッダーは Tabs グループでは非表示にし、画面ごとに自前のヘッダーを描く方針。
  */
 
 import "../../global.css";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { colors } from "@/shared/constants/colors";
+import { colors } from "@/shared/theme";
 import { ErrorBoundary } from "@/shared/components/molecules/ErrorBoundary";
 
 const queryClient = new QueryClient();
 
-/**
- * ルートレイアウトコンポーネント
- * 全画面共通のナビゲーション設定とステータスバーを管理する
- */
 export default function RootLayout() {
   return (
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
-        <StatusBar style="light" backgroundColor={colors.bgDark} />
+        <StatusBar style="dark" backgroundColor={colors.surface} />
         <Stack
           screenOptions={{
-            headerStyle: { backgroundColor: colors.bgDark },
-            headerTintColor: colors.textWhite,
-            contentStyle: { backgroundColor: colors.bgDark },
+            headerStyle: { backgroundColor: colors.surface },
+            headerTintColor: colors.onSurface,
+            contentStyle: { backgroundColor: colors.surface },
             headerShadowVisible: false,
             animation: "fade",
           }}
         >
-          {/* タブ画面グループ - ヘッダーはタブレイアウト側で管理 */}
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-          {/* インデックスリダイレクト - ヘッダー非表示 */}
           <Stack.Screen name="index" options={{ headerShown: false }} />
         </Stack>
       </QueryClientProvider>

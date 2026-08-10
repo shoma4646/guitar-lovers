@@ -1,9 +1,20 @@
 /**
  * WebViewに表示するYouTube IFrame APIラッパーHTMLを生成する。
  * postMessageで現在再生位置・duration・コマンド受信を扱う。
+ * @param videoId - YouTube動画ID
+ * @param startSeconds - 再生開始位置（秒）。フレーズ練習の再開時に、初回シークの
+ *   postMessageレース（player未初期化時に送ると無視される）を避けるため
+ *   playerVars.startへ焼き込む
+ * @param initialRate - 初期再生速度。同じ理由でonReady内で直接setPlaybackRateする
  */
-export function buildYouTubeHtml(videoId: string): string {
+export function buildYouTubeHtml(
+  videoId: string,
+  startSeconds = 0,
+  initialRate = 1,
+): string {
   const safeId = videoId.replace(/[^a-zA-Z0-9_-]/g, "");
+  const safeStart = Math.max(0, Math.floor(startSeconds));
+  const safeRate = Number.isFinite(initialRate) && initialRate > 0 ? initialRate : 1;
   return `
 <!DOCTYPE html>
 <html>
@@ -25,9 +36,10 @@ export function buildYouTubeHtml(videoId: string): string {
     function onYouTubeIframeAPIReady() {
       player = new YT.Player('player', {
         videoId: '${safeId}',
-        playerVars: { playsinline: 1 },
+        playerVars: { playsinline: 1, start: ${safeStart} },
         events: {
           onReady: function(e) {
+            e.target.setPlaybackRate(${safeRate});
             window.ReactNativeWebView.postMessage(JSON.stringify({
               type: 'ready', duration: e.target.getDuration()
             }));

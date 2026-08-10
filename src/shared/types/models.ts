@@ -42,6 +42,48 @@ export interface ABLoop {
   enabled: boolean;
 }
 
+/** 練習フレーズ（動画内の反復練習区間） */
+export interface PracticePhrase {
+  /** 一意のID */
+  id: string;
+  /** YouTube動画ID */
+  videoId: string;
+  /** 動画タイトル */
+  videoTitle: string;
+  /** ユーザーが付ける名前（例: 速弾きフレーズ1） */
+  name: string;
+  /** 区間開始（秒） */
+  startSec: number;
+  /** 区間終了（秒） */
+  endSec: number;
+  /** 現在の到達BPM */
+  currentBpm: number;
+  /** 目標BPM */
+  targetBpm: number;
+  /** 区間再生時の再生速度 */
+  playbackRate: number;
+  /** 作成日時（ISO 8601形式） */
+  createdAt: string;
+  /** 更新日時（ISO 8601形式） */
+  updatedAt: string;
+  /** アーカイブ日時（ISO 8601形式、任意）。設定されていれば今日の練習メニューに出さない */
+  archivedAt?: string;
+}
+
+/** フレーズ1回分の練習結果 */
+export interface PhraseAttempt {
+  /** 一意のID */
+  id: string;
+  /** 対象フレーズのID */
+  phraseId: string;
+  /** 練習日時（ISO 8601形式） */
+  date: string;
+  /** その回のBPM */
+  bpm: number;
+  /** 結果。ok=弾けた / partial=あやしい / ng=弾けなかった */
+  result: "ok" | "partial" | "ng";
+}
+
 /** 動画プリセット */
 export interface VideoPreset {
   /** 一意のID */
@@ -76,24 +118,6 @@ export interface RecentVideo {
   title: string;
   /** 最終視聴日時（ISO 8601形式） */
   lastWatchedAt: string;
-}
-
-/** ニュース記事 */
-export interface NewsArticle {
-  /** 一意のID */
-  id: string;
-  /** タイトル */
-  title: string;
-  /** 抜粋 */
-  excerpt: string;
-  /** サムネイル画像URL */
-  image: string;
-  /** 公開日（YYYY-MM-DD形式） */
-  date: string;
-  /** カテゴリ */
-  category: string;
-  /** 本文URL（任意） */
-  url?: string;
 }
 
 /** 練習統計 */

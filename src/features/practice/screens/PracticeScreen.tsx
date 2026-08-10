@@ -1,13 +1,21 @@
 /**
- * 練習画面
- * YouTube動画を使った練習機能を提供する。
- * 3タブ構成（練習・プリセット・お気に入り）でロジックは各components配下へ分割。
+ * 練習画面（Practice Dashboard）
+ *
+ * Stitch modern_5 / modern_6 のダッシュボード構成:
+ * - 上部 AppBar（プロフィール + Guitar Lovers + 設定）
+ * - 見出し: "Practice Dashboard" + サブテキスト
+ * - Pill 形状のサブタブ（練習 / プリセット / お気に入り）
+ * - サブタブごとに本体コンポーネントを描画
+ *
+ * 実行ロジック（YouTube 再生・ABループ・メトロノーム）は子コンポーネントに残し、
+ * このスクリーンは表示構造のみを担当する。
  */
 
 import React, { useState } from "react";
-import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
+import { View, Text, Pressable, ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { colors } from "@/shared/constants/colors";
+import { Icon } from "@/shared/components/atoms/Icon";
+import { colors } from "@/shared/theme";
 import { ErrorBoundary } from "@/shared/components/molecules/ErrorBoundary";
 import { PracticeTab } from "@/features/practice/components/PracticeTab";
 import { PresetsTab } from "@/features/practice/components/PresetsTab";
@@ -21,70 +29,85 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: "favorites", label: "お気に入り" },
 ];
 
-/** 練習画面コンポーネント */
 export function PracticeScreen() {
   const [activeTab, setActiveTab] = useState<TabKey>("practice");
 
   return (
     <ErrorBoundary>
-      <SafeAreaView style={styles.container} edges={["bottom"]}>
-        <View style={styles.tabBar}>
+      <SafeAreaView edges={["top"]} className="flex-1 bg-surface">
+        {/* Top App Bar */}
+        <View className="flex-row items-center justify-between px-margin-mobile h-16">
+          <View className="w-10 h-10 rounded-full bg-surface-container-high items-center justify-center">
+            <Icon name="school" size={20} color={colors.onSurfaceVariant} />
+          </View>
+          <Text className="font-bold text-headline-lg text-on-surface">
+            Guitar Lovers
+          </Text>
+          <Pressable className="active:opacity-70" hitSlop={8}>
+            <Icon name="settings" size={24} color={colors.primary} />
+          </Pressable>
+        </View>
+
+        {/* Welcome Section */}
+        <View className="px-margin-mobile mb-lg">
+          <Text className="text-on-surface-variant text-body-md mb-base">
+            今日も少しずつ、確かな一歩を。
+          </Text>
+          <Text
+            className="text-headline-xl"
+            style={{ color: colors.primary, fontWeight: "700", letterSpacing: -0.5 }}
+          >
+            Practice Dashboard
+          </Text>
+        </View>
+
+        {/* Sub-tab Pills */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{ paddingHorizontal: 20, gap: 8 }}
+          className="grow-0 mb-md"
+          style={{ flexGrow: 0 }}
+        >
           {TABS.map((tab) => {
             const active = tab.key === activeTab;
             return (
-              <TouchableOpacity
+              <Pressable
                 key={tab.key}
                 onPress={() => setActiveTab(tab.key)}
-                style={[
-                  styles.tab,
-                  active && {
-                    borderBottomColor: colors.primary,
-                    borderBottomWidth: 2,
-                  },
-                ]}
+                className="active:opacity-80"
+                style={{
+                  paddingHorizontal: 24,
+                  paddingVertical: 8,
+                  borderRadius: 9999,
+                  backgroundColor: active
+                    ? colors.primary
+                    : colors.surfaceContainerHighest,
+                }}
                 accessibilityRole="tab"
                 accessibilityState={{ selected: active }}
               >
                 <Text
-                  style={[
-                    styles.tabText,
-                    { color: active ? colors.primary : colors.textGray },
-                  ]}
+                  className="text-label-sm"
+                  style={{
+                    color: active ? colors.onPrimary : colors.onSurfaceVariant,
+                    fontWeight: "600",
+                  }}
                 >
                   {tab.label}
                 </Text>
-              </TouchableOpacity>
+              </Pressable>
             );
           })}
-        </View>
+        </ScrollView>
 
-        {activeTab === "practice" && <PracticeTab />}
-        {activeTab === "presets" && <PresetsTab />}
-        {activeTab === "favorites" && <FavoritesTab />}
+        {/* Tab Content */}
+        <View className="flex-1">
+          {activeTab === "practice" && <PracticeTab />}
+          {activeTab === "presets" && <PresetsTab />}
+          {activeTab === "favorites" && <FavoritesTab />}
+        </View>
       </SafeAreaView>
     </ErrorBoundary>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.bgDark,
-  },
-  tabBar: {
-    flexDirection: "row",
-    borderBottomWidth: 1,
-    borderBottomColor: colors.bgGray,
-  },
-  tab: {
-    flex: 1,
-    paddingVertical: 12,
-    alignItems: "center",
-    borderBottomWidth: 2,
-    borderBottomColor: "transparent",
-  },
-  tabText: {
-    fontSize: 14,
-    fontWeight: "600",
-  },
-});

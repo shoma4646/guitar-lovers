@@ -1,21 +1,26 @@
-import { useCallback, useEffect, useRef } from "react";
+/**
+ * メトロノームウィジェット（Stitch modern_3 風）
+ *
+ * - "METRONOME" ラベル + 4 ビートのドット表示
+ * - 大型 BPM 表示（display-numeric 64px）と +/- ボタン
+ * - START / STOP CTA
+ */
+
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
-  TouchableOpacity,
-  Switch,
+  Pressable,
   Animated,
   StyleSheet,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
-import { colors } from "@/shared/constants/colors";
+import { Icon } from "@/shared/components/atoms/Icon";
+import { colors } from "@/shared/theme";
 import { usePracticeStore, PRESET_BPMS } from "@/stores/practice";
 
-/**
- * メトロノームウィジェット
- * BPM調整・プリセット選択・有効/無効の切り替えを提供する
- */
+const BEAT_DOTS = [0, 1, 2, 3];
+
 export function MetronomeWidget() {
   const bpm = usePracticeStore((s) => s.metronomeBpm);
   const enabled = usePracticeStore((s) => s.metronomeEnabled);
@@ -24,12 +29,13 @@ export function MetronomeWidget() {
 
   const beatScale = useRef(new Animated.Value(1)).current;
   const beatTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [activeBeat, setActiveBeat] = useState(0);
 
   const animateBeat = useCallback(() => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     Animated.sequence([
       Animated.timing(beatScale, {
-        toValue: 1.15,
+        toValue: 1.08,
         duration: 80,
         useNativeDriver: true,
       }),
@@ -39,6 +45,7 @@ export function MetronomeWidget() {
         useNativeDriver: true,
       }),
     ]).start();
+    setActiveBeat((prev) => (prev + 1) % 4);
   }, [beatScale]);
 
   useEffect(() => {
@@ -49,6 +56,7 @@ export function MetronomeWidget() {
     } else if (beatTimerRef.current) {
       clearInterval(beatTimerRef.current);
       beatTimerRef.current = null;
+      setActiveBeat(0);
     }
     return () => {
       if (beatTimerRef.current) {
@@ -59,74 +67,147 @@ export function MetronomeWidget() {
   }, [enabled, bpm, animateBeat]);
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>メトロノーム</Text>
-        <Switch
-          value={enabled}
-          onValueChange={setMetronomeEnabled}
-          trackColor={{ false: colors.bgGray, true: colors.primary + "99" }}
-          thumbColor={enabled ? colors.primary : colors.textGray}
-          accessibilityLabel="メトロノームのオン/オフ"
-        />
+    <View
+      className="bg-surface-container-lowest"
+      style={[styles.container, shadowStyle]}
+    >
+      {/* Header: METRONOME label + beat dots */}
+      <View className="flex-row items-center justify-between">
+        <Text
+          className="text-label-sm"
+          style={{
+            color: colors.onSurfaceVariant,
+            letterSpacing: 1.2,
+            textTransform: "uppercase",
+            fontWeight: "600",
+          }}
+        >
+          METRONOME
+        </Text>
+        <View className="flex-row" style={{ gap: 8 }}>
+          {BEAT_DOTS.map((i) => (
+            <View
+              key={i}
+              style={{
+                width: 10,
+                height: 10,
+                borderRadius: 5,
+                backgroundColor:
+                  enabled && i === activeBeat ? colors.primary : colors.outlineVariant,
+              }}
+            />
+          ))}
+        </View>
       </View>
 
-      <View style={styles.bpmCircleRow}>
-        <TouchableOpacity
+      {/* BPM Display */}
+      <View className="flex-row items-center justify-around" style={{ paddingVertical: 16 }}>
+        <Pressable
           onPress={() => setMetronomeBpm(bpm - 5)}
-          style={styles.adjustBtn}
+          className="items-center justify-center active:scale-90"
+          style={[
+            styles.adjustBtn,
+            { backgroundColor: `${colors.primaryContainer}33` },
+          ]}
           accessibilityLabel="BPMを5下げる"
         >
-          <Ionicons name="remove" size={20} color={colors.textWhite} />
-        </TouchableOpacity>
+          <Icon name="remove" size={22} color={colors.primary} />
+        </Pressable>
 
         <Animated.View
-          style={[
-            styles.bpmCircle,
-            {
-              backgroundColor: enabled ? colors.primary : colors.bgGray,
-              transform: [{ scale: beatScale }],
-            },
-          ]}
+          className="items-center"
+          style={{ transform: [{ scale: beatScale }] }}
         >
           <Text style={styles.bpmValue}>{bpm}</Text>
-          <Text style={styles.bpmLabel}>BPM</Text>
+          <Text
+            className="text-label-sm"
+            style={{
+              color: colors.onSurfaceVariant,
+              letterSpacing: 1,
+              fontWeight: "600",
+            }}
+          >
+            BPM
+          </Text>
         </Animated.View>
 
-        <TouchableOpacity
+        <Pressable
           onPress={() => setMetronomeBpm(bpm + 5)}
-          style={styles.adjustBtn}
+          className="items-center justify-center active:scale-90"
+          style={[
+            styles.adjustBtn,
+            { backgroundColor: `${colors.primaryContainer}33` },
+          ]}
           accessibilityLabel="BPMを5上げる"
         >
-          <Ionicons name="add" size={20} color={colors.textWhite} />
-        </TouchableOpacity>
+          <Icon name="add" size={22} color={colors.primary} />
+        </Pressable>
       </View>
 
-      <View style={styles.presetRow}>
+      {/* Start / Stop CTA */}
+      <Pressable
+        onPress={() => setMetronomeEnabled(!enabled)}
+        className="w-full flex-row items-center justify-center active:opacity-90"
+        style={{
+          height: 52,
+          marginTop: 16,
+          borderRadius: 16,
+          backgroundColor: enabled ? colors.error : colors.primary,
+          gap: 8,
+        }}
+        accessibilityRole="switch"
+        accessibilityState={{ checked: enabled }}
+      >
+        <Icon
+          name={enabled ? "pause" : "play_circle"}
+          size={22}
+          color={colors.onPrimary}
+        />
+        <Text
+          className="text-label-sm"
+          style={{
+            color: colors.onPrimary,
+            fontWeight: "700",
+            letterSpacing: 1,
+          }}
+        >
+          {enabled ? "STOP" : "START PRACTICE"}
+        </Text>
+      </Pressable>
+
+      {/* BPM Presets */}
+      <View
+        className="flex-row flex-wrap justify-center"
+        style={{ gap: 8, marginTop: 16 }}
+      >
         {PRESET_BPMS.map((presetBpm) => {
           const active = bpm === presetBpm;
           return (
-            <TouchableOpacity
+            <Pressable
               key={presetBpm}
               onPress={() => setMetronomeBpm(presetBpm)}
-              style={[
-                styles.chip,
-                {
-                  backgroundColor: active ? colors.primary : colors.bgGray,
-                },
-              ]}
+              className="active:opacity-80"
+              style={{
+                paddingHorizontal: 12,
+                paddingVertical: 6,
+                borderRadius: 9999,
+                backgroundColor: active
+                  ? colors.primary
+                  : colors.surfaceContainer,
+              }}
               accessibilityRole="radio"
               accessibilityState={{ selected: active }}
             >
               <Text
-                style={[
-                  styles.chipText,
-                  { color: active ? colors.textWhite : colors.textGray },
-                ]}
+                className="text-label-sm"
+                style={{
+                  color: active ? colors.onPrimary : colors.onSurfaceVariant,
+                  fontWeight: "600",
+                }}
               >
                 {presetBpm}
               </Text>
-            </TouchableOpacity>
+            </Pressable>
           );
         })}
       </View>
@@ -134,70 +215,31 @@ export function MetronomeWidget() {
   );
 }
 
+const shadowStyle = {
+  shadowColor: "#000",
+  shadowOpacity: 0.04,
+  shadowRadius: 12,
+  shadowOffset: { width: 0, height: 4 },
+  elevation: 2,
+};
+
 const styles = StyleSheet.create({
   container: {
-    borderRadius: 14,
-    padding: 14,
-    marginBottom: 20,
-    gap: 12,
-    backgroundColor: colors.bgLightDark,
-  },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  title: {
-    color: colors.textWhite,
-    fontSize: 15,
-    fontWeight: "600",
-  },
-  bpmCircleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 20,
+    padding: 24,
+    borderRadius: 16,
+    gap: 4,
   },
   adjustBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.bgGray,
-  },
-  bpmCircle: {
-    width: 90,
-    height: 90,
-    borderRadius: 45,
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 2,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
   },
   bpmValue: {
-    color: colors.textWhite,
-    fontSize: 28,
-    fontWeight: "700",
+    fontSize: 64,
+    fontWeight: "800",
+    lineHeight: 64,
+    letterSpacing: -2.56,
+    color: "#251817",
     fontVariant: ["tabular-nums"],
-  },
-  bpmLabel: {
-    color: colors.textWhite + "CC",
-    fontSize: 12,
-    fontWeight: "500",
-  },
-  presetRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    flexWrap: "wrap",
-    gap: 6,
-  },
-  chip: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 14,
-  },
-  chipText: {
-    fontSize: 12,
-    fontWeight: "600",
   },
 });

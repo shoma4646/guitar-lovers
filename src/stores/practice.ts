@@ -30,6 +30,18 @@ interface PracticeState {
   duration: number;
   /** 再生速度 */
   playbackRate: PlaybackRate;
+  /**
+   * 動画読み込み時の初期再生位置（秒）
+   * loadVideo呼び出し時のみ更新する。setABLoopでのA点調整では変えない
+   * （WebViewの再読み込みをフレーズ練習開始時のみに限定するため）
+   */
+  videoStartSeconds: number;
+  /**
+   * 動画読み込み時にWebView側へ焼き込む初期再生速度
+   * loadVideo呼び出し時のみ更新する。setPlaybackRateでのライブ変更では変えない
+   * （同上の理由でWebView再読み込みを避けるため）
+   */
+  videoInitialRate: PlaybackRate;
 
   // --- 練習時間 ---
   /** 練習タイマー開始時刻 */
@@ -49,7 +61,18 @@ interface PracticeState {
 
   // --- アクション ---
   setUrlInput: (url: string) => void;
-  loadVideo: (videoId: string, title?: string) => void;
+  /**
+   * 動画を読み込む
+   * @param options.abLoop - 指定するとABループを空リセットせずこの値で開始する
+   *   （フレーズからの練習再開で、区間を保持したまま動画を切り替えるために使用）
+   * @param options.playbackRate - 指定するとその速度をWebView初期化時に焼き込み、
+   *   選択中の再生速度としても反映する（未指定時は現在の再生速度を維持）
+   */
+  loadVideo: (
+    videoId: string,
+    title?: string,
+    options?: { abLoop?: ABLoop; playbackRate?: PlaybackRate },
+  ) => void;
   clearVideo: () => void;
   setIsPlaying: (playing: boolean) => void;
   setCurrentTime: (time: number) => void;
@@ -97,6 +120,8 @@ export const usePracticeStore = create<PracticeState>((set, get) => ({
   currentTime: 0,
   duration: 0,
   playbackRate: 1.0,
+  videoStartSeconds: 0,
+  videoInitialRate: 1.0,
   practiceStartTime: null,
   elapsedSeconds: 0,
   abLoop: { pointA: null, pointB: null, enabled: false },
@@ -107,16 +132,21 @@ export const usePracticeStore = create<PracticeState>((set, get) => ({
   // アクション実装
   setUrlInput: (url) => set({ urlInput: url }),
 
-  loadVideo: (videoId, title = "") => {
+  loadVideo: (videoId, title = "", options) => {
     // URLとして入力された場合はIDを抽出する
     const id = extractVideoId(videoId) ?? videoId;
+    // 速度未指定時は現在選択中の速度を維持する（WebView側にも改めて焼き込む）
+    const nextPlaybackRate = options?.playbackRate ?? get().playbackRate;
     set({
       loadedVideoId: id,
       videoTitle: title,
       isPlaying: false,
       currentTime: 0,
       duration: 0,
-      abLoop: { pointA: null, pointB: null, enabled: false },
+      videoStartSeconds: options?.abLoop?.pointA ?? 0,
+      videoInitialRate: nextPlaybackRate,
+      playbackRate: nextPlaybackRate,
+      abLoop: options?.abLoop ?? { pointA: null, pointB: null, enabled: false },
       bookmarks: [],
     });
   },
@@ -128,6 +158,8 @@ export const usePracticeStore = create<PracticeState>((set, get) => ({
       isPlaying: false,
       currentTime: 0,
       duration: 0,
+      videoStartSeconds: 0,
+      videoInitialRate: 1.0,
       urlInput: "",
     }),
 
