@@ -3,7 +3,7 @@ import { calculateStats, savePracticeSession } from "../storage";
 import type { PracticeSession } from "@/shared/types/models";
 
 jest.mock("@react-native-async-storage/async-storage", () =>
-  require("@react-native-async-storage/async-storage/jest"),
+  require("@react-native-async-storage/async-storage/jest/async-storage-mock"),
 );
 
 /** 指定日からn日前のISO日付文字列を作る */
