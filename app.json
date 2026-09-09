@@ -5,32 +5,42 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "dark",
+    "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "scheme": "guitar-lovers",
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#0B0F19"
+      "backgroundColor": "#fff8f7"
     },
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.guitarlovers.app",
       "infoPlist": {
-        "NSMicrophoneUsageDescription": "チューナー機能でマイクを使用します"
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
       "package": "com.guitarlovers.app",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#0B0F19"
-      },
-      "permissions": ["RECORD_AUDIO"]
+        "backgroundColor": "#fff8f7"
+      }
     },
     "experiments": {
       "typedRoutes": true
     },
-    "plugins": ["expo-router", "expo-av"]
+    "plugins": [
+      "expo-router",
+      [
+        "react-native-audio-api",
+        {
+          "iosMicrophonePermission": "チューナーでギターの音を拾うためにマイクを使用します。音声は端末内で処理され、保存や送信はされません。",
+          "iosBackgroundMode": false,
+          "androidPermissions": ["android.permission.RECORD_AUDIO"],
+          "androidForegroundService": false
+        }
+      ]
+    ]
   }
 }
