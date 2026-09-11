@@ -218,8 +218,12 @@ export function migrateIfNeeded(): Promise<void> {
 /**
  * 全練習セッションを取得する
  */
-export async function getPracticeSessions(): Promise<PracticeSession[]> {
+function loadPracticeSessions(): Promise<PracticeSession[]> {
   return readList(STORAGE_KEYS.PRACTICE_SESSIONS, practiceSessionSchema);
+}
+
+export function getPracticeSessions(): Promise<PracticeSession[]> {
+  return serialized(loadPracticeSessions);
 }
 
 /**
@@ -228,7 +232,7 @@ export async function getPracticeSessions(): Promise<PracticeSession[]> {
  */
 export function savePracticeSession(session: PracticeSession): Promise<void> {
   return serialized(async () => {
-    const sessions = await getPracticeSessions();
+    const sessions = await loadPracticeSessions();
     sessions.unshift(session);
     await writeList(STORAGE_KEYS.PRACTICE_SESSIONS, sessions);
   });
@@ -240,7 +244,7 @@ export function savePracticeSession(session: PracticeSession): Promise<void> {
  */
 export function deletePracticeSession(id: string): Promise<void> {
   return serialized(async () => {
-    const sessions = await getPracticeSessions();
+    const sessions = await loadPracticeSessions();
     await writeList(
       STORAGE_KEYS.PRACTICE_SESSIONS,
       sessions.filter((s) => s.id !== id)
@@ -255,8 +259,12 @@ export function deletePracticeSession(id: string): Promise<void> {
 /**
  * 全お気に入り動画を取得する
  */
-export async function getFavoriteVideos(): Promise<FavoriteVideo[]> {
+function loadFavoriteVideos(): Promise<FavoriteVideo[]> {
   return readList(STORAGE_KEYS.FAVORITE_VIDEOS, favoriteVideoSchema);
+}
+
+export function getFavoriteVideos(): Promise<FavoriteVideo[]> {
+  return serialized(loadFavoriteVideos);
 }
 
 /**
@@ -265,7 +273,7 @@ export async function getFavoriteVideos(): Promise<FavoriteVideo[]> {
  */
 export function addFavoriteVideo(video: FavoriteVideo): Promise<void> {
   return serialized(async () => {
-    const favorites = await getFavoriteVideos();
+    const favorites = await loadFavoriteVideos();
     if (favorites.some((f) => f.videoId === video.videoId)) return;
     favorites.unshift(video);
     await writeList(STORAGE_KEYS.FAVORITE_VIDEOS, favorites);
@@ -278,7 +286,7 @@ export function addFavoriteVideo(video: FavoriteVideo): Promise<void> {
  */
 export function removeFavoriteVideo(videoId: string): Promise<void> {
   return serialized(async () => {
-    const favorites = await getFavoriteVideos();
+    const favorites = await loadFavoriteVideos();
     await writeList(
       STORAGE_KEYS.FAVORITE_VIDEOS,
       favorites.filter((f) => f.videoId !== videoId)
@@ -293,8 +301,12 @@ export function removeFavoriteVideo(videoId: string): Promise<void> {
 /**
  * 最近視聴した動画一覧を取得する
  */
-export async function getRecentVideos(): Promise<RecentVideo[]> {
+function loadRecentVideos(): Promise<RecentVideo[]> {
   return readList(STORAGE_KEYS.RECENT_VIDEOS, recentVideoSchema);
+}
+
+export function getRecentVideos(): Promise<RecentVideo[]> {
+  return serialized(loadRecentVideos);
 }
 
 /**
@@ -304,7 +316,7 @@ export async function getRecentVideos(): Promise<RecentVideo[]> {
  */
 export function addRecentVideo(video: RecentVideo): Promise<void> {
   return serialized(async () => {
-    const recents = await getRecentVideos();
+    const recents = await loadRecentVideos();
     const filtered = recents.filter((r) => r.videoId !== video.videoId);
     filtered.unshift(video);
     await writeList(
@@ -321,15 +333,19 @@ export function addRecentVideo(video: RecentVideo): Promise<void> {
 /**
  * 全練習フレーズを取得する
  */
-export async function getPracticePhrases(): Promise<PracticePhrase[]> {
+function loadPracticePhrases(): Promise<PracticePhrase[]> {
   return readList(STORAGE_KEYS.PRACTICE_PHRASES, practicePhraseSchema);
+}
+
+export function getPracticePhrases(): Promise<PracticePhrase[]> {
+  return serialized(loadPracticePhrases);
 }
 
 async function updatePracticePhraseUnlocked(
   id: string,
   patch: Partial<Omit<PracticePhrase, "id">>
 ): Promise<void> {
-  const phrases = await getPracticePhrases();
+  const phrases = await loadPracticePhrases();
   await writeList(
     STORAGE_KEYS.PRACTICE_PHRASES,
     phrases.map((p) => (p.id === id ? { ...p, ...patch } : p))
@@ -342,7 +358,7 @@ async function updatePracticePhraseUnlocked(
  */
 export function savePracticePhrase(phrase: PracticePhrase): Promise<void> {
   return serialized(async () => {
-    const phrases = await getPracticePhrases();
+    const phrases = await loadPracticePhrases();
     phrases.unshift(phrase);
     await writeList(STORAGE_KEYS.PRACTICE_PHRASES, phrases);
   });
@@ -375,13 +391,13 @@ export function archivePracticePhrase(id: string): Promise<void> {
  */
 export function deletePracticePhrase(id: string): Promise<void> {
   return serialized(async () => {
-    const attempts = await getPhraseAttempts();
+    const attempts = await loadPhraseAttempts();
     const remainingAttempts = attempts.filter((a) => a.phraseId !== id);
     if (remainingAttempts.length !== attempts.length) {
       await writeList(STORAGE_KEYS.PHRASE_ATTEMPTS, remainingAttempts);
     }
 
-    const phrases = await getPracticePhrases();
+    const phrases = await loadPracticePhrases();
     await writeList(
       STORAGE_KEYS.PRACTICE_PHRASES,
       phrases.filter((p) => p.id !== id)
@@ -396,12 +412,16 @@ export function deletePracticePhrase(id: string): Promise<void> {
 /**
  * 全フレーズ練習結果を取得する
  */
-export async function getPhraseAttempts(): Promise<PhraseAttempt[]> {
+function loadPhraseAttempts(): Promise<PhraseAttempt[]> {
   return readList(STORAGE_KEYS.PHRASE_ATTEMPTS, phraseAttemptSchema);
 }
 
+export function getPhraseAttempts(): Promise<PhraseAttempt[]> {
+  return serialized(loadPhraseAttempts);
+}
+
 async function savePhraseAttemptUnlocked(attempt: PhraseAttempt): Promise<void> {
-  const attempts = await getPhraseAttempts();
+  const attempts = await loadPhraseAttempts();
   const others = attempts.filter((a) => a.id !== attempt.id);
   others.unshift(attempt);
   await writeList(STORAGE_KEYS.PHRASE_ATTEMPTS, others);
@@ -423,7 +443,7 @@ export function savePhraseAttempt(attempt: PhraseAttempt): Promise<void> {
  */
 export function recordPhraseResult(attempt: PhraseAttempt): Promise<void> {
   return serialized(async () => {
-    const phrases = await getPracticePhrases();
+    const phrases = await loadPracticePhrases();
     const phrase = phrases.find((p) => p.id === attempt.phraseId);
     if (!phrase) {
       throw new Error("記録対象のフレーズが見つかりません");

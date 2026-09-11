@@ -290,6 +290,20 @@ describe("migrateIfNeeded", () => {
     expect(await corruptKeys()).toHaveLength(0);
   });
 
+  it("移行をawaitせずに直後に読み出しても、移行後の値が返る", async () => {
+    await AsyncStorage.setItem(
+      STORAGE_KEYS.PRACTICE_PHRASES,
+      JSON.stringify([{ ...makePhrase("x"), currentBpm: 300 }]),
+    );
+
+    void migrateIfNeeded();
+    const phrases = await getPracticePhrases();
+
+    expect(phrases).toHaveLength(1);
+    expect(phrases[0].currentBpm).toBe(240);
+    expect(await corruptKeys()).toHaveLength(0);
+  });
+
   it("バージョン1からも補正を適用する", async () => {
     await AsyncStorage.setItem(STORAGE_KEYS.SCHEMA_VERSION, "1");
     await AsyncStorage.setItem(

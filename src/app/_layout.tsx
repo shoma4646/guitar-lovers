@@ -6,7 +6,6 @@
  */
 
 import "../../global.css";
-import { useEffect } from "react";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -16,11 +15,10 @@ import { migrateIfNeeded } from "@/shared/services/storage";
 
 const queryClient = new QueryClient();
 
-export default function RootLayout() {
-  useEffect(() => {
-    void migrateIfNeeded();
-  }, []);
+// 各画面のクエリより先にストレージの直列キューへ積むため、効果ではなくモジュール読み込み時に開始する
+void migrateIfNeeded();
 
+export default function RootLayout() {
   return (
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>

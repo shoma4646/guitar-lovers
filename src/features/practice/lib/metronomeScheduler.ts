@@ -41,12 +41,22 @@ export interface ScheduleBeatsResult {
   beatIndex: number;
 }
 
-/** lookahead区間内に収まる拍を積み上げ、次回呼び出し用の状態を返す */
+/**
+ * lookahead区間内に収まる拍を積み上げ、次回呼び出し用の状態を返す
+ * JSスレッドの停止などで現在時刻が予定を1拍以上追い越していた場合、取りこぼした拍は
+ * まとめて鳴らさず次の未来の拍まで読み飛ばす
+ */
 export function scheduleBeats(input: ScheduleBeatsInput): ScheduleBeatsResult {
   const { now, intervalSec, lookaheadSec, beatsPerBar } = input;
   const beats: ScheduledBeat[] = [];
   let nextBeatTime = input.nextBeatTime;
   let beatIndex = input.beatIndex;
+
+  if (nextBeatTime < now - intervalSec) {
+    const missed = Math.ceil((now - nextBeatTime) / intervalSec);
+    nextBeatTime += missed * intervalSec;
+    beatIndex = (beatIndex + missed) % beatsPerBar;
+  }
 
   while (nextBeatTime < now + lookaheadSec) {
     beats.push({ time: nextBeatTime, isAccent: beatIndex === 0, beatIndex });
