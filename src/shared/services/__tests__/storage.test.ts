@@ -104,6 +104,37 @@ describe("readList（要素単位の検証）", () => {
     expect(await AsyncStorage.getItem(backups[0])).toBe("{not json");
   });
 
+  it("破損データの退避は1回で完結し、繰り返し読んでも退避キーは増えない", async () => {
+    await AsyncStorage.setItem(STORAGE_KEYS.PRACTICE_PHRASES, "{not json");
+    await AsyncStorage.setItem(
+      STORAGE_KEYS.PHRASE_ATTEMPTS,
+      JSON.stringify([makeAttempt("a1", "p"), { id: "broken" }]),
+    );
+
+    await getPracticePhrases();
+    await getPracticePhrases();
+    await getPhraseAttempts();
+    await getPhraseAttempts();
+
+    const keys = await AsyncStorage.getAllKeys();
+    expect(keys.filter((k) => k.includes("__corrupt_"))).toHaveLength(1);
+    expect(keys.filter((k) => k.includes("__dropped_"))).toHaveLength(1);
+    expect((await getPhraseAttempts()).map((a) => a.id)).toEqual(["a1"]);
+  });
+
+  it("同一キーへの並行書き込みが互いの変更を消さない", async () => {
+    await savePracticePhrase(makePhrase("p"));
+
+    await Promise.all([
+      recordPhraseResult({ ...makeAttempt("a1", "p"), bpm: 120, result: "ok" }),
+      archivePracticePhrase("p"),
+    ]);
+
+    const [phrase] = await getPracticePhrases();
+    expect(phrase.currentBpm).toBe(120);
+    expect(phrase.archivedAt).toEqual(expect.any(String));
+  });
+
   it("配列でない内容も退避キーへ保存して空配列を返す", async () => {
     await AsyncStorage.setItem(
       STORAGE_KEYS.PHRASE_ATTEMPTS,

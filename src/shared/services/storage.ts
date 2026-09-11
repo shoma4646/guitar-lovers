@@ -1,6 +1,6 @@
 /**
  * AsyncStorageを使用したローカルストレージサービス
- * 練習セッション・お気に入り・最近視聴した動画の永続化を担当する
+ * 練習セッション・お気に入り・最近視聴した動画・練習フレーズ・練習結果の永続化を担当する
  */
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -38,8 +38,8 @@ const MAX_RECENT_VIDEOS = 10;
 
 /**
  * 指定キーのリストをAsyncStorageから読み込み、要素ごとにスキーマ検証する
- * 壊れた要素だけを捨てて残りを返す。JSON自体が破損している場合は
- * 元データを退避キーへ書き戻してから空配列を返す（上書き消失防止）
+ * 壊れた要素は退避キーへ移してから残りを返す。JSON自体が破損している場合は
+ * 元データを退避キーへ移してから空配列を返す（上書き消失防止）
  * @param key - AsyncStorageのキー
  * @param itemSchema - 要素1件分のZodスキーマ
  */
@@ -61,13 +61,13 @@ async function readList<T>(
     raw = JSON.parse(json);
   } catch (e) {
     console.error(`[storage] ${key}のJSON解析に失敗、破損データを退避します`, e);
-    await AsyncStorage.setItem(`${key}__corrupt_${Date.now()}`, json);
+    await quarantine(key, `${key}__corrupt_${Date.now()}`, json, null);
     return [];
   }
 
   if (!Array.isArray(raw)) {
     console.error(`[storage] ${key}の内容が配列ではありません、破損データを退避します`);
-    await AsyncStorage.setItem(`${key}__corrupt_${Date.now()}`, json);
+    await quarantine(key, `${key}__corrupt_${Date.now()}`, json, null);
     return [];
   }
 
@@ -83,12 +83,48 @@ async function readList<T>(
   }
   if (dropped.length > 0) {
     console.warn(`[storage] ${key}で壊れた要素を${dropped.length}件除外し退避します`);
-    await AsyncStorage.setItem(
+    await quarantine(
+      key,
       `${key}__dropped_${Date.now()}`,
-      JSON.stringify(dropped)
+      JSON.stringify(dropped),
+      JSON.stringify(result)
     );
   }
   return result;
+}
+
+/**
+ * 破損データを退避キーへ保存し、元キーを正常分だけに置き換える
+ * 元キーに破損分を残すと読み出しのたびに退避キーが増えるため、退避は1回で完結させる
+ */
+async function quarantine(
+  key: string,
+  backupKey: string,
+  backupJson: string,
+  remainingJson: string | null
+): Promise<void> {
+  await AsyncStorage.setItem(backupKey, backupJson);
+  if (remainingJson === null) {
+    await AsyncStorage.removeItem(key);
+  } else {
+    await AsyncStorage.setItem(key, remainingJson);
+  }
+}
+
+let writeQueue: Promise<unknown> = Promise.resolve();
+
+/**
+ * 全件読み→加工→全件書きの更新を直列化する
+ * 同一キーへの並行更新が後勝ちで互いの変更を消さないよう、書き込み系はすべてこれを通す
+ */
+function serialized<T>(operation: () => Promise<T>): Promise<T> {
+  const run = writeQueue.then(operation, operation);
+  writeQueue = run.catch(() => undefined);
+  return run;
+}
+
+async function writeList(key: string, list: unknown[]): Promise<void> {
+  await AsyncStorage.setItem(key, JSON.stringify(list));
 }
 
 // ============================================================
@@ -125,7 +161,7 @@ async function rewriteRawList(
     return;
   }
   if (!Array.isArray(raw)) return;
-  await AsyncStorage.setItem(key, JSON.stringify(raw.map(mapItem)));
+  await writeList(key, raw.map(mapItem));
 }
 
 /** バージョン2への移行: 旧ビルドが検証せずに保存したBPMと区間を新スキーマに収まる値へ補正する */
@@ -153,24 +189,26 @@ async function migrateToV2(): Promise<void> {
  * ストレージのスキーマバージョンを確認し、必要なら移行処理を行う
  * アプリ起動時に1回呼び出す想定。失敗してもアプリの起動は妨げない
  */
-export async function migrateIfNeeded(): Promise<void> {
-  try {
-    const stored = await AsyncStorage.getItem(STORAGE_KEYS.SCHEMA_VERSION);
-    const version = stored ? Number(stored) : 0;
+export function migrateIfNeeded(): Promise<void> {
+  return serialized(async () => {
+    try {
+      const stored = await AsyncStorage.getItem(STORAGE_KEYS.SCHEMA_VERSION);
+      const version = stored ? Number(stored) : 0;
 
-    if (version >= SCHEMA_VERSION) return;
+      if (version >= SCHEMA_VERSION) return;
 
-    if (version < 2) {
-      await migrateToV2();
+      if (version < 2) {
+        await migrateToV2();
+      }
+
+      await AsyncStorage.setItem(
+        STORAGE_KEYS.SCHEMA_VERSION,
+        String(SCHEMA_VERSION)
+      );
+    } catch (e) {
+      console.error("[storage] migrateIfNeededに失敗", e);
     }
-
-    await AsyncStorage.setItem(
-      STORAGE_KEYS.SCHEMA_VERSION,
-      String(SCHEMA_VERSION)
-    );
-  } catch (e) {
-    console.error("[storage] migrateIfNeededに失敗", e);
-  }
+  });
 }
 
 // ============================================================
@@ -188,28 +226,26 @@ export async function getPracticeSessions(): Promise<PracticeSession[]> {
  * 練習セッションを保存する
  * @param session - 保存するセッション
  */
-export async function savePracticeSession(
-  session: PracticeSession
-): Promise<void> {
-  const sessions = await getPracticeSessions();
-  sessions.unshift(session);
-  await AsyncStorage.setItem(
-    STORAGE_KEYS.PRACTICE_SESSIONS,
-    JSON.stringify(sessions)
-  );
+export function savePracticeSession(session: PracticeSession): Promise<void> {
+  return serialized(async () => {
+    const sessions = await getPracticeSessions();
+    sessions.unshift(session);
+    await writeList(STORAGE_KEYS.PRACTICE_SESSIONS, sessions);
+  });
 }
 
 /**
  * 指定IDの練習セッションを削除する
  * @param id - 削除するセッションのID
  */
-export async function deletePracticeSession(id: string): Promise<void> {
-  const sessions = await getPracticeSessions();
-  const updated = sessions.filter((s) => s.id !== id);
-  await AsyncStorage.setItem(
-    STORAGE_KEYS.PRACTICE_SESSIONS,
-    JSON.stringify(updated)
-  );
+export function deletePracticeSession(id: string): Promise<void> {
+  return serialized(async () => {
+    const sessions = await getPracticeSessions();
+    await writeList(
+      STORAGE_KEYS.PRACTICE_SESSIONS,
+      sessions.filter((s) => s.id !== id)
+    );
+  });
 }
 
 // ============================================================
@@ -227,28 +263,27 @@ export async function getFavoriteVideos(): Promise<FavoriteVideo[]> {
  * お気に入り動画を追加する
  * @param video - 追加する動画
  */
-export async function addFavoriteVideo(video: FavoriteVideo): Promise<void> {
-  const favorites = await getFavoriteVideos();
-  const exists = favorites.some((f) => f.videoId === video.videoId);
-  if (exists) return;
-  favorites.unshift(video);
-  await AsyncStorage.setItem(
-    STORAGE_KEYS.FAVORITE_VIDEOS,
-    JSON.stringify(favorites)
-  );
+export function addFavoriteVideo(video: FavoriteVideo): Promise<void> {
+  return serialized(async () => {
+    const favorites = await getFavoriteVideos();
+    if (favorites.some((f) => f.videoId === video.videoId)) return;
+    favorites.unshift(video);
+    await writeList(STORAGE_KEYS.FAVORITE_VIDEOS, favorites);
+  });
 }
 
 /**
  * お気に入り動画を削除する
  * @param videoId - 削除する動画のID
  */
-export async function removeFavoriteVideo(videoId: string): Promise<void> {
-  const favorites = await getFavoriteVideos();
-  const updated = favorites.filter((f) => f.videoId !== videoId);
-  await AsyncStorage.setItem(
-    STORAGE_KEYS.FAVORITE_VIDEOS,
-    JSON.stringify(updated)
-  );
+export function removeFavoriteVideo(videoId: string): Promise<void> {
+  return serialized(async () => {
+    const favorites = await getFavoriteVideos();
+    await writeList(
+      STORAGE_KEYS.FAVORITE_VIDEOS,
+      favorites.filter((f) => f.videoId !== videoId)
+    );
+  });
 }
 
 // ============================================================
@@ -267,15 +302,16 @@ export async function getRecentVideos(): Promise<RecentVideo[]> {
  * 同じ動画が既にある場合は先頭に移動する
  * @param video - 記録する動画
  */
-export async function addRecentVideo(video: RecentVideo): Promise<void> {
-  const recents = await getRecentVideos();
-  const filtered = recents.filter((r) => r.videoId !== video.videoId);
-  filtered.unshift(video);
-  const trimmed = filtered.slice(0, MAX_RECENT_VIDEOS);
-  await AsyncStorage.setItem(
-    STORAGE_KEYS.RECENT_VIDEOS,
-    JSON.stringify(trimmed)
-  );
+export function addRecentVideo(video: RecentVideo): Promise<void> {
+  return serialized(async () => {
+    const recents = await getRecentVideos();
+    const filtered = recents.filter((r) => r.videoId !== video.videoId);
+    filtered.unshift(video);
+    await writeList(
+      STORAGE_KEYS.RECENT_VIDEOS,
+      filtered.slice(0, MAX_RECENT_VIDEOS)
+    );
+  });
 }
 
 // ============================================================
@@ -289,19 +325,27 @@ export async function getPracticePhrases(): Promise<PracticePhrase[]> {
   return readList(STORAGE_KEYS.PRACTICE_PHRASES, practicePhraseSchema);
 }
 
+async function updatePracticePhraseUnlocked(
+  id: string,
+  patch: Partial<Omit<PracticePhrase, "id">>
+): Promise<void> {
+  const phrases = await getPracticePhrases();
+  await writeList(
+    STORAGE_KEYS.PRACTICE_PHRASES,
+    phrases.map((p) => (p.id === id ? { ...p, ...patch } : p))
+  );
+}
+
 /**
  * 練習フレーズを保存する
  * @param phrase - 保存するフレーズ
  */
-export async function savePracticePhrase(
-  phrase: PracticePhrase
-): Promise<void> {
-  const phrases = await getPracticePhrases();
-  phrases.unshift(phrase);
-  await AsyncStorage.setItem(
-    STORAGE_KEYS.PRACTICE_PHRASES,
-    JSON.stringify(phrases)
-  );
+export function savePracticePhrase(phrase: PracticePhrase): Promise<void> {
+  return serialized(async () => {
+    const phrases = await getPracticePhrases();
+    phrases.unshift(phrase);
+    await writeList(STORAGE_KEYS.PRACTICE_PHRASES, phrases);
+  });
 }
 
 /**
@@ -309,48 +353,40 @@ export async function savePracticePhrase(
  * @param id - 更新するフレーズのID
  * @param patch - 更新するフィールドの差分
  */
-export async function updatePracticePhrase(
+export function updatePracticePhrase(
   id: string,
   patch: Partial<Omit<PracticePhrase, "id">>
 ): Promise<void> {
-  const phrases = await getPracticePhrases();
-  const updated = phrases.map((p) =>
-    p.id === id ? { ...p, ...patch } : p
-  );
-  await AsyncStorage.setItem(
-    STORAGE_KEYS.PRACTICE_PHRASES,
-    JSON.stringify(updated)
-  );
+  return serialized(() => updatePracticePhraseUnlocked(id, patch));
 }
 
 /**
  * 練習フレーズをアーカイブする（今日の練習メニューと進捗一覧に表示しない。記録は保持する）
  * @param id - アーカイブするフレーズのID
  */
-export async function archivePracticePhrase(id: string): Promise<void> {
-  await updatePracticePhrase(id, { archivedAt: new Date().toISOString() });
+export function archivePracticePhrase(id: string): Promise<void> {
+  return updatePracticePhrase(id, { archivedAt: new Date().toISOString() });
 }
 
 /**
  * 指定IDの練習フレーズを削除する。関連するフレーズ練習結果も併せて削除する
+ * 結果を先に消すため、途中で失敗してもフレーズは一覧に残り再実行で完了できる
  * @param id - 削除するフレーズのID
  */
-export async function deletePracticePhrase(id: string): Promise<void> {
-  const phrases = await getPracticePhrases();
-  const updated = phrases.filter((p) => p.id !== id);
-  await AsyncStorage.setItem(
-    STORAGE_KEYS.PRACTICE_PHRASES,
-    JSON.stringify(updated)
-  );
+export function deletePracticePhrase(id: string): Promise<void> {
+  return serialized(async () => {
+    const attempts = await getPhraseAttempts();
+    const remainingAttempts = attempts.filter((a) => a.phraseId !== id);
+    if (remainingAttempts.length !== attempts.length) {
+      await writeList(STORAGE_KEYS.PHRASE_ATTEMPTS, remainingAttempts);
+    }
 
-  const attempts = await getPhraseAttempts();
-  const remainingAttempts = attempts.filter((a) => a.phraseId !== id);
-  if (remainingAttempts.length !== attempts.length) {
-    await AsyncStorage.setItem(
-      STORAGE_KEYS.PHRASE_ATTEMPTS,
-      JSON.stringify(remainingAttempts)
+    const phrases = await getPracticePhrases();
+    await writeList(
+      STORAGE_KEYS.PRACTICE_PHRASES,
+      phrases.filter((p) => p.id !== id)
     );
-  }
+  });
 }
 
 // ============================================================
@@ -364,20 +400,19 @@ export async function getPhraseAttempts(): Promise<PhraseAttempt[]> {
   return readList(STORAGE_KEYS.PHRASE_ATTEMPTS, phraseAttemptSchema);
 }
 
+async function savePhraseAttemptUnlocked(attempt: PhraseAttempt): Promise<void> {
+  const attempts = await getPhraseAttempts();
+  const others = attempts.filter((a) => a.id !== attempt.id);
+  others.unshift(attempt);
+  await writeList(STORAGE_KEYS.PHRASE_ATTEMPTS, others);
+}
+
 /**
  * フレーズ練習結果を保存する。同じIDが既にあれば置き換える（再送しても重複しない）
  * @param attempt - 保存する練習結果
  */
-export async function savePhraseAttempt(
-  attempt: PhraseAttempt
-): Promise<void> {
-  const attempts = await getPhraseAttempts();
-  const others = attempts.filter((a) => a.id !== attempt.id);
-  others.unshift(attempt);
-  await AsyncStorage.setItem(
-    STORAGE_KEYS.PHRASE_ATTEMPTS,
-    JSON.stringify(others)
-  );
+export function savePhraseAttempt(attempt: PhraseAttempt): Promise<void> {
+  return serialized(() => savePhraseAttemptUnlocked(attempt));
 }
 
 /**
@@ -386,19 +421,21 @@ export async function savePhraseAttempt(
  * attemptのIDをキーにした置き換え保存なので、途中で失敗しても同じ入力で再実行できる
  * @param attempt - 記録する練習結果
  */
-export async function recordPhraseResult(attempt: PhraseAttempt): Promise<void> {
-  const phrases = await getPracticePhrases();
-  const phrase = phrases.find((p) => p.id === attempt.phraseId);
-  if (!phrase) {
-    throw new Error("記録対象のフレーズが見つかりません");
-  }
+export function recordPhraseResult(attempt: PhraseAttempt): Promise<void> {
+  return serialized(async () => {
+    const phrases = await getPracticePhrases();
+    const phrase = phrases.find((p) => p.id === attempt.phraseId);
+    if (!phrase) {
+      throw new Error("記録対象のフレーズが見つかりません");
+    }
 
-  // 到達BPMを先に更新する。attemptだけ残ると「弾けた記録があるのに到達BPMが低い」状態になるため
-  if (attempt.result === "ok" && phrase.currentBpm < attempt.bpm) {
-    await updatePracticePhrase(phrase.id, {
-      currentBpm: attempt.bpm,
-      updatedAt: attempt.date,
-    });
-  }
-  await savePhraseAttempt(attempt);
+    // 到達BPMを先に更新する。attemptだけ残ると「弾けた記録があるのに到達BPMが低い」状態になるため
+    if (attempt.result === "ok" && phrase.currentBpm < attempt.bpm) {
+      await updatePracticePhraseUnlocked(phrase.id, {
+        currentBpm: attempt.bpm,
+        updatedAt: attempt.date,
+      });
+    }
+    await savePhraseAttemptUnlocked(attempt);
+  });
 }

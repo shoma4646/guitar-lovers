@@ -49,6 +49,8 @@ export function usePitchDetector(): PitchDetectorState {
   const [clarity, setClarity] = useState(0);
 
   const recorderRef = useRef<AudioRecorder | null>(null);
+  // 権限確認のawait中に再度startが呼ばれてレコーダーが二重生成されないよう、同期的に占有する
+  const startingRef = useRef(false);
   const detectorRef = useRef<{
     inputLength: number;
     detector: PitchDetector<Float32Array>;
@@ -80,62 +82,72 @@ export function usePitchDetector(): PitchDetectorState {
   }, [releaseRecorder]);
 
   const start = useCallback(async () => {
-    if (recorderRef.current) return;
-    setStatus("requesting");
+    if (recorderRef.current || startingRef.current) return;
+    startingRef.current = true;
+    try {
+      setStatus("requesting");
 
-    const permission = await AudioManager.requestRecordingPermissions();
-    if (permission !== "Granted") {
-      setStatus("denied");
-      return;
+      const permission = await AudioManager.requestRecordingPermissions();
+      if (permission !== "Granted") {
+        setStatus("denied");
+        return;
+      }
+
+      AudioManager.setAudioSessionOptions({
+        iosCategory: "playAndRecord",
+        iosMode: "measurement",
+        iosOptions: ["defaultToSpeaker"],
+      });
+
+      const recorder = new AudioRecorder();
+      recorderRef.current = recorder;
+      recorder.onError((error) => {
+        console.error("[tuner] 録音エラー", error);
+        void releaseRecorder().finally(() => setStatus("error"));
+      });
+      recorder.onAudioReady(
+        {
+          sampleRate: PREFERRED_SAMPLE_RATE,
+          bufferLength: PREFERRED_BUFFER_LENGTH,
+          channelCount: 1,
+        },
+        (event) => {
+          const pcm = event.buffer.getChannelData(0);
+          // 端末によって希望と異なる長さで届くため、実際の長さに合わせて検出器を作り直す
+          if (detectorRef.current?.inputLength !== pcm.length) {
+            detectorRef.current = {
+              inputLength: pcm.length,
+              detector: PitchDetector.forFloat32Array(pcm.length),
+            };
+          }
+          const [detectedHz, detectedClarity] =
+            detectorRef.current.detector.findPitch(pcm, event.buffer.sampleRate);
+          const smoothed = smootherRef.current.push(detectedHz, detectedClarity);
+
+          const now = Date.now();
+          if (now - lastUiUpdateRef.current < UI_UPDATE_INTERVAL_MS) return;
+          lastUiUpdateRef.current = now;
+          setHz(smoothed);
+          setClarity(detectedClarity);
+        },
+      );
+
+      const result = await recorder.start();
+      if (result.status === "error") {
+        console.error("[tuner] 録音を開始できません", result.message);
+        await releaseRecorder();
+        setStatus("error");
+        return;
+      }
+      // start中にstopが呼ばれて解放済みなら、開始状態にはしない
+      if (recorderRef.current !== recorder) {
+        await recorder.stop();
+        return;
+      }
+      setStatus("listening");
+    } finally {
+      startingRef.current = false;
     }
-
-    AudioManager.setAudioSessionOptions({
-      iosCategory: "playAndRecord",
-      iosMode: "measurement",
-      iosOptions: ["defaultToSpeaker"],
-    });
-
-    const recorder = new AudioRecorder();
-    recorder.onError((error) => {
-      console.error("[tuner] 録音エラー", error);
-      void releaseRecorder().finally(() => setStatus("error"));
-    });
-    recorder.onAudioReady(
-      {
-        sampleRate: PREFERRED_SAMPLE_RATE,
-        bufferLength: PREFERRED_BUFFER_LENGTH,
-        channelCount: 1,
-      },
-      (event) => {
-        const pcm = event.buffer.getChannelData(0);
-        // 端末によって希望と異なる長さで届くため、実際の長さに合わせて検出器を作り直す
-        if (detectorRef.current?.inputLength !== pcm.length) {
-          detectorRef.current = {
-            inputLength: pcm.length,
-            detector: PitchDetector.forFloat32Array(pcm.length),
-          };
-        }
-        const [detectedHz, detectedClarity] =
-          detectorRef.current.detector.findPitch(pcm, event.buffer.sampleRate);
-        const smoothed = smootherRef.current.push(detectedHz, detectedClarity);
-
-        const now = Date.now();
-        if (now - lastUiUpdateRef.current < UI_UPDATE_INTERVAL_MS) return;
-        lastUiUpdateRef.current = now;
-        setHz(smoothed);
-        setClarity(detectedClarity);
-      },
-    );
-
-    recorderRef.current = recorder;
-    const result = await recorder.start();
-    if (result.status === "error") {
-      console.error("[tuner] 録音を開始できません", result.message);
-      await releaseRecorder();
-      setStatus("error");
-      return;
-    }
-    setStatus("listening");
   }, [releaseRecorder]);
 
   useFocusEffect(
