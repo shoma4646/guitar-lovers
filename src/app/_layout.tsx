@@ -11,12 +11,8 @@ import { StatusBar } from "expo-status-bar";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { colors } from "@/shared/theme";
 import { ErrorBoundary } from "@/shared/components/molecules/ErrorBoundary";
-import { migrateIfNeeded } from "@/shared/services/storage";
 
 const queryClient = new QueryClient();
-
-// 各画面のクエリより先にストレージの直列キューへ積むため、効果ではなくモジュール読み込み時に開始する
-void migrateIfNeeded();
 
 export default function RootLayout() {
   return (

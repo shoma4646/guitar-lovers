@@ -210,7 +210,8 @@ async function migrateToV2(): Promise<void> {
 
 /**
  * ストレージのスキーマバージョンを確認し、必要なら移行処理を行う
- * アプリ起動時に1回呼び出す想定。失敗してもアプリの起動は妨げない
+ * モジュール読み込み時に自動で1回キューへ積まれるため、通常は明示的に呼ぶ必要はない。
+ * 失敗してもアプリの起動は妨げない
  */
 export function migrateIfNeeded(): Promise<void> {
   return serialized(async () => {
@@ -232,6 +233,17 @@ export function migrateIfNeeded(): Promise<void> {
       console.error("[storage] migrateIfNeededに失敗", e);
     }
   });
+}
+
+// 読み書きはすべて同じ直列キューを通るため、モジュール読み込み時に積めばどの読み出しよりも先に移行が走る
+void migrateIfNeeded();
+
+/** 記録対象のフレーズが存在しない（削除済み）ときの例外 */
+export class PhraseNotFoundError extends Error {
+  constructor() {
+    super("記録対象のフレーズが見つかりません");
+    this.name = "PhraseNotFoundError";
+  }
 }
 
 // ============================================================
@@ -469,7 +481,7 @@ export function recordPhraseResult(attempt: PhraseAttempt): Promise<void> {
     const phrases = await loadPracticePhrases();
     const phrase = phrases.find((p) => p.id === attempt.phraseId);
     if (!phrase) {
-      throw new Error("記録対象のフレーズが見つかりません");
+      throw new PhraseNotFoundError();
     }
 
     // 到達BPMを先に更新する。attemptだけ残ると「弾けた記録があるのに到達BPMが低い」状態になるため

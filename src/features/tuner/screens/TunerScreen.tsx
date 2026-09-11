@@ -59,8 +59,10 @@ function getMeterColor(cents: number): string {
   return colors.danger;
 }
 
-/** セント値を `+12 cents` 形式に整形 */
+/** セント値を `+12 cents` 形式に整形。針の可動範囲（±50）を超える場合はその旨を示す */
 function formatCents(cents: number): string {
+  if (cents > 50) return "+50 cents以上";
+  if (cents < -50) return "-50 cents以下";
   const sign = cents > 0 ? "+" : "";
   return `${sign}${Math.round(cents)} cents`;
 }

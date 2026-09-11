@@ -22,4 +22,4 @@ export const SUPPORT_URL =
 export const YOUTUBE_TERMS_URL = "https://www.youtube.com/t/terms";
 
 /** Googleプライバシーポリシー */
-export const GOOGLE_PRIVACY_URL = "http://www.google.com/policies/privacy";
+export const GOOGLE_PRIVACY_URL = "https://www.google.com/policies/privacy";

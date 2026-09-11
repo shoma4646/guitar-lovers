@@ -22,6 +22,7 @@ import { useSavePracticeSession } from "@/features/progress/api/useSavePracticeS
 import { useAddRecentVideo } from "@/features/practice/api/useAddRecentVideo";
 import { useSavePracticePhrase } from "@/features/practice/api/useSavePracticePhrase";
 import { useRecordPhraseResult } from "@/features/practice/api/useRecordPhraseResult";
+import { PhraseNotFoundError } from "@/shared/services/storage";
 import { useVideoPresets } from "@/features/practice/api/useVideoPresets";
 import { MetronomeWidget } from "./MetronomeWidget";
 import { VideoLoaderCard } from "./VideoLoaderCard";
@@ -246,8 +247,14 @@ export function PracticeTab() {
           bpm,
           result,
         });
-      } catch {
-        // 失敗時はshowMutationErrorがAlertを表示済み。シートと練習状態は保持し再送できるようにする
+      } catch (error) {
+        if (error instanceof PhraseNotFoundError) {
+          Alert.alert("記録できません", "このフレーズは削除されています");
+          setShowResultSheet(false);
+          setActivePractice(null);
+          return;
+        }
+        // 保存失敗はshowMutationErrorがAlertを表示済み。シートと練習状態は保持し再送できるようにする
         return;
       }
       setShowResultSheet(false);

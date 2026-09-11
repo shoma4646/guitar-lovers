@@ -212,6 +212,7 @@ export const usePracticeStore = create<PracticeState>((set, get) => ({
       duration: 0,
       videoStartSeconds: 0,
       videoInitialRate: 1.0,
+      playbackRate: 1.0,
       urlInput: "",
       abLoop: { pointA: null, pointB: null, enabled: false },
       bookmarks: [],
