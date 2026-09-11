@@ -4,6 +4,9 @@
  * - "METRONOME" ラベル + 4 ビートのドット表示
  * - 大型 BPM 表示（display-numeric 64px）と +/- ボタン
  * - START / STOP CTA
+ *
+ * クリック音はAudioContextの時間軸上でlookahead予約し、UI更新とHapticsは
+ * その予約時刻に合わせて遅延実行する。
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -15,11 +18,23 @@ import {
   StyleSheet,
 } from "react-native";
 import * as Haptics from "expo-haptics";
+import { AudioContext, AudioManager } from "react-native-audio-api";
 import { Icon } from "@/shared/components/atoms/Icon";
 import { colors } from "@/shared/theme";
 import { usePracticeStore, PRESET_BPMS } from "@/stores/practice";
+import {
+  bpmToIntervalSec,
+  scheduleBeats,
+} from "@/features/practice/lib/metronomeScheduler";
+import { scheduleClick } from "@/features/practice/lib/metronomeClick";
 
 const BEAT_DOTS = [0, 1, 2, 3];
+const BEATS_PER_BAR = BEAT_DOTS.length;
+/** 先読み予約する秒数。ポーリング間隔より十分長くしないと拍が抜ける */
+const LOOKAHEAD_SEC = 0.1;
+const TICK_INTERVAL_MS = 25;
+/** 開始直後の最初の拍までの猶予。0だとAudioContext起動前の時刻を予約して鳴らない */
+const FIRST_BEAT_DELAY_SEC = 0.05;
 
 export function MetronomeWidget() {
   const bpm = usePracticeStore((s) => s.metronomeBpm);
@@ -28,43 +43,75 @@ export function MetronomeWidget() {
   const setMetronomeEnabled = usePracticeStore((s) => s.setMetronomeEnabled);
 
   const beatScale = useRef(new Animated.Value(1)).current;
-  const beatTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const intervalSecRef = useRef(bpmToIntervalSec(bpm));
   const [activeBeat, setActiveBeat] = useState(0);
 
-  const animateBeat = useCallback(() => {
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    Animated.sequence([
-      Animated.timing(beatScale, {
-        toValue: 1.08,
-        duration: 80,
-        useNativeDriver: true,
-      }),
-      Animated.timing(beatScale, {
-        toValue: 1,
-        duration: 80,
-        useNativeDriver: true,
-      }),
-    ]).start();
-    setActiveBeat((prev) => (prev + 1) % 4);
-  }, [beatScale]);
+  useEffect(() => {
+    intervalSecRef.current = bpmToIntervalSec(bpm);
+  }, [bpm]);
+
+  const animateBeat = useCallback(
+    (beatIndex: number) => {
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      Animated.sequence([
+        Animated.timing(beatScale, {
+          toValue: 1.08,
+          duration: 80,
+          useNativeDriver: true,
+        }),
+        Animated.timing(beatScale, {
+          toValue: 1,
+          duration: 80,
+          useNativeDriver: true,
+        }),
+      ]).start();
+      setActiveBeat(beatIndex);
+    },
+    [beatScale],
+  );
 
   useEffect(() => {
-    if (enabled) {
-      const intervalMs = (60 / bpm) * 1000;
-      animateBeat();
-      beatTimerRef.current = setInterval(animateBeat, intervalMs);
-    } else if (beatTimerRef.current) {
-      clearInterval(beatTimerRef.current);
-      beatTimerRef.current = null;
-      setActiveBeat(0);
-    }
-    return () => {
-      if (beatTimerRef.current) {
-        clearInterval(beatTimerRef.current);
-        beatTimerRef.current = null;
+    if (!enabled) return;
+
+    AudioManager.setAudioSessionOptions({
+      iosCategory: "playback",
+      iosOptions: ["mixWithOthers"],
+    });
+    const ctx = new AudioContext();
+    let nextBeatTime = ctx.currentTime + FIRST_BEAT_DELAY_SEC;
+    let beatIndex = 0;
+    const uiTimers = new Set<ReturnType<typeof setTimeout>>();
+
+    const ticker = setInterval(() => {
+      const result = scheduleBeats({
+        now: ctx.currentTime,
+        nextBeatTime,
+        intervalSec: intervalSecRef.current,
+        lookaheadSec: LOOKAHEAD_SEC,
+        beatIndex,
+        beatsPerBar: BEATS_PER_BAR,
+      });
+      nextBeatTime = result.nextBeatTime;
+      beatIndex = result.beatIndex;
+
+      for (const beat of result.beats) {
+        scheduleClick(ctx, beat.time, beat.isAccent);
+        const delayMs = Math.max(0, (beat.time - ctx.currentTime) * 1000);
+        const timer = setTimeout(() => {
+          uiTimers.delete(timer);
+          animateBeat(beat.beatIndex);
+        }, delayMs);
+        uiTimers.add(timer);
       }
+    }, TICK_INTERVAL_MS);
+
+    return () => {
+      clearInterval(ticker);
+      uiTimers.forEach((timer) => clearTimeout(timer));
+      setActiveBeat(0);
+      void ctx.close();
     };
-  }, [enabled, bpm, animateBeat]);
+  }, [enabled, animateBeat]);
 
   return (
     <View
@@ -239,7 +286,7 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     lineHeight: 64,
     letterSpacing: -2.56,
-    color: "#251817",
+    color: colors.onSurface,
     fontVariant: ["tabular-nums"],
   },
 });
