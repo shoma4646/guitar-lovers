@@ -217,26 +217,30 @@ describe("recordPhraseResult", () => {
   it("到達BPM更新後に結果保存が失敗しても、同じ入力の再実行で完了まで前進する", async () => {
     await savePracticePhrase(makePhrase("p"));
     const attempt = { ...makeAttempt("a1", "p"), bpm: 120, result: "ok" as const };
-    const original = AsyncStorage.setItem.bind(AsyncStorage);
-    const setItem = jest
-      .spyOn(AsyncStorage, "setItem")
-      .mockImplementation(async (key, value) => {
-        if (key === STORAGE_KEYS.PHRASE_ATTEMPTS) {
-          setItem.mockImplementation(original);
-          throw new Error("disk full");
-        }
-        return original(key, value);
-      });
+    // モックのsetItemは元からjest.fnなので、spyOnではなく実装を退避して差し替える
+    const setItem = AsyncStorage.setItem as jest.Mock;
+    const original = setItem.getMockImplementation()!;
+    let failOnce = true;
+    setItem.mockImplementation(async (key: string, value: string) => {
+      if (failOnce && key === STORAGE_KEYS.PHRASE_ATTEMPTS) {
+        failOnce = false;
+        throw new Error("disk full");
+      }
+      return original(key, value);
+    });
 
-    await expect(recordPhraseResult(attempt)).rejects.toThrow("disk full");
-    expect((await getPracticePhrases())[0].currentBpm).toBe(120);
-    expect(await getPhraseAttempts()).toHaveLength(0);
+    try {
+      await expect(recordPhraseResult(attempt)).rejects.toThrow("disk full");
+      expect((await getPracticePhrases())[0].currentBpm).toBe(120);
+      expect(await getPhraseAttempts()).toHaveLength(0);
 
-    await recordPhraseResult(attempt);
+      await recordPhraseResult(attempt);
 
-    expect((await getPracticePhrases())[0].currentBpm).toBe(120);
-    expect((await getPhraseAttempts()).map((a) => a.id)).toEqual(["a1"]);
-    setItem.mockRestore();
+      expect((await getPracticePhrases())[0].currentBpm).toBe(120);
+      expect((await getPhraseAttempts()).map((a) => a.id)).toEqual(["a1"]);
+    } finally {
+      setItem.mockImplementation(original);
+    }
   });
 
   it("削除済みフレーズへの記録は例外にし、孤児の結果を残さない", async () => {
@@ -296,23 +300,37 @@ describe("migrateIfNeeded", () => {
         { ...makePhrase("slow"), currentBpm: 30 },
         { ...makePhrase("flat"), startSec: 20, endSec: 20 },
         { ...makePhrase("rev"), startSec: 30, endSec: 20 },
+        {
+          ...makePhrase("odd"),
+          playbackRate: 0.8,
+          createdAt: "2026-09-01T09:00:00+09:00",
+          updatedAt: "2026-09-01",
+        },
       ]),
     );
     await AsyncStorage.setItem(
       STORAGE_KEYS.PHRASE_ATTEMPTS,
-      JSON.stringify([{ ...makeAttempt("a1", "slow"), bpm: 35 }]),
+      JSON.stringify([{ ...makeAttempt("a1", "slow"), bpm: 35, date: "2026-09-02" }]),
     );
 
     await migrateIfNeeded();
 
     const phrases = await getPracticePhrases();
-    expect(phrases.map((p) => p.id)).toEqual(["fast", "slow", "flat", "rev"]);
+    expect(phrases.map((p) => p.id)).toEqual(["fast", "slow", "flat", "rev", "odd"]);
     expect(phrases[0]).toMatchObject({ currentBpm: 240, targetBpm: 240 });
     expect(phrases[1].currentBpm).toBe(40);
     expect(phrases[2]).toMatchObject({ startSec: 20, endSec: 21 });
     expect(phrases[3]).toMatchObject({ startSec: 30, endSec: 31 });
-    expect((await getPhraseAttempts())[0].bpm).toBe(40);
-    expect(await corruptKeys()).toHaveLength(0);
+    expect(phrases[4]).toMatchObject({
+      playbackRate: 0.75,
+      createdAt: "2026-09-01T00:00:00.000Z",
+      updatedAt: "2026-09-01T00:00:00.000Z",
+    });
+    const [attempt] = await getPhraseAttempts();
+    expect(attempt.bpm).toBe(40);
+    expect(attempt.date).toBe("2026-09-02T00:00:00.000Z");
+    const keys = await AsyncStorage.getAllKeys();
+    expect(keys.filter((k) => k.includes("__corrupt_") || k.includes("__dropped_"))).toHaveLength(0);
   });
 
   it("移行をawaitせずに直後に読み出しても、移行後の値が返る", async () => {

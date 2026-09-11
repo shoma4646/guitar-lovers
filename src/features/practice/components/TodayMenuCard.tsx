@@ -74,7 +74,18 @@ export function TodayMenuCard({ onStartPhrase, onTryPreset }: Props) {
         {
           text: "アーカイブ",
           onPress: () =>
-            archivePhrase(phrase.id, { onSuccess: () => clearIfActive(phrase.id) }),
+            Alert.alert(
+              "アーカイブの確認",
+              `「${phrase.name}」を練習メニューと進捗一覧から外します。記録は残りますが、アプリ内で元に戻す操作は現在ありません。`,
+              [
+                { text: "キャンセル", style: "cancel" },
+                {
+                  text: "アーカイブする",
+                  onPress: () =>
+                    archivePhrase(phrase.id, { onSuccess: () => clearIfActive(phrase.id) }),
+                },
+              ],
+            ),
         },
         {
           text: "削除",

@@ -51,6 +51,8 @@ export function usePitchDetector(): PitchDetectorState {
   const recorderRef = useRef<AudioRecorder | null>(null);
   // 権限確認のawait中に再度startが呼ばれてレコーダーが二重生成されないよう、同期的に占有する
   const startingRef = useRef(false);
+  // stopのたびに進む世代番号。await中にstopされたstartは、続きを実行せず解放して終わる
+  const runIdRef = useRef(0);
   const detectorRef = useRef<{
     inputLength: number;
     detector: PitchDetector<Float32Array>;
@@ -77,6 +79,7 @@ export function usePitchDetector(): PitchDetectorState {
   }, []);
 
   const stop = useCallback(async () => {
+    runIdRef.current += 1;
     await releaseRecorder();
     setStatus("idle");
   }, [releaseRecorder]);
@@ -84,10 +87,13 @@ export function usePitchDetector(): PitchDetectorState {
   const start = useCallback(async () => {
     if (recorderRef.current || startingRef.current) return;
     startingRef.current = true;
+    const runId = runIdRef.current;
+    const isCancelled = () => runIdRef.current !== runId;
     try {
       setStatus("requesting");
 
       const permission = await AudioManager.requestRecordingPermissions();
+      if (isCancelled()) return;
       if (permission !== "Granted") {
         setStatus("denied");
         return;
@@ -133,15 +139,16 @@ export function usePitchDetector(): PitchDetectorState {
       );
 
       const result = await recorder.start();
+      if (isCancelled()) {
+        // 開始待ちの間にstopされた。stop側はまだrefが空で解放できていないため、ここで解放する
+        recorderRef.current = recorder;
+        await releaseRecorder();
+        return;
+      }
       if (result.status === "error") {
         console.error("[tuner] 録音を開始できません", result.message);
         await releaseRecorder();
         setStatus("error");
-        return;
-      }
-      // start中にstopが呼ばれて解放済みなら、開始状態にはしない
-      if (recorderRef.current !== recorder) {
-        await recorder.stop();
         return;
       }
       setStatus("listening");

@@ -33,6 +33,7 @@ import {
 } from "@/shared/constants/tuning";
 import { ErrorBoundary } from "@/shared/components/molecules/ErrorBoundary";
 import { usePitchDetector } from "@/features/tuner/hooks/usePitchDetector";
+import { usePracticeStore } from "@/stores/practice";
 import {
   nearestStringInPreset,
   noteToFrequency,
@@ -137,6 +138,8 @@ export function TunerScreen() {
     }
     setTunedStrings(UNTUNED_STRINGS);
     inTuneSinceRef.current = null;
+    // メトロノームのクリック音（800/1000Hz）をマイクが拾い、弦の音として検出してしまうため止める
+    usePracticeStore.getState().setMetronomeEnabled(false);
     void start();
   }, [isActive, start, stop]);
 

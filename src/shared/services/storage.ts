@@ -18,6 +18,7 @@ import { recentVideoSchema } from "@/shared/lib/schemas/recentVideo";
 import { practicePhraseSchema } from "@/shared/lib/schemas/practicePhrase";
 import { phraseAttemptSchema } from "@/shared/lib/schemas/phraseAttempt";
 import { clampBpm } from "@/shared/constants/bpm";
+import { PLAYBACK_RATES } from "@/shared/constants/playback";
 
 /** ストレージキーの定義 */
 export const STORAGE_KEYS = {
@@ -133,7 +134,7 @@ async function writeList(key: string, list: unknown[]): Promise<void> {
 
 /**
  * 現在のストレージスキーマバージョン
- * 2: BPMを40〜240の整数に限定し、区間はstartSec < endSecを必須にした
+ * 2: BPMを40〜240の整数、区間をstartSec < endSec、再生速度を選択肢の値、日時をISO 8601に限定した
  */
 const SCHEMA_VERSION = 2;
 
@@ -145,6 +146,20 @@ function normalizeBpm(value: unknown): unknown {
   return typeof value === "number" && Number.isFinite(value)
     ? clampBpm(Math.round(value))
     : value;
+}
+
+function normalizePlaybackRate(value: unknown): unknown {
+  if (typeof value !== "number" || !Number.isFinite(value)) return value;
+  return PLAYBACK_RATES.reduce((nearest, rate) =>
+    Math.abs(rate - value) < Math.abs(nearest - value) ? rate : nearest
+  );
+}
+
+/** 解釈できる日時文字列をUTCのISO 8601へ揃える（解釈できなければそのまま返す） */
+function normalizeDateTime(value: unknown): unknown {
+  if (typeof value !== "string") return value;
+  const time = Date.parse(value);
+  return Number.isNaN(time) ? value : new Date(time).toISOString();
 }
 
 /** キーの生JSON配列を要素ごとに変換して書き戻す（スキーマ検証前の移行用） */
@@ -178,10 +193,18 @@ async function migrateToV2(): Promise<void> {
       currentBpm: normalizeBpm(item.currentBpm),
       targetBpm: normalizeBpm(item.targetBpm),
       endSec: needsEndFix ? startSec + 1 : endSec,
+      playbackRate: normalizePlaybackRate(item.playbackRate),
+      createdAt: normalizeDateTime(item.createdAt),
+      updatedAt: normalizeDateTime(item.updatedAt),
+      ...(item.archivedAt !== undefined
+        ? { archivedAt: normalizeDateTime(item.archivedAt) }
+        : {}),
     };
   });
   await rewriteRawList(STORAGE_KEYS.PHRASE_ATTEMPTS, (item) =>
-    isRecord(item) ? { ...item, bpm: normalizeBpm(item.bpm) } : item
+    isRecord(item)
+      ? { ...item, bpm: normalizeBpm(item.bpm), date: normalizeDateTime(item.date) }
+      : item
   );
 }
 
