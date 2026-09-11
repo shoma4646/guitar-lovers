@@ -1,19 +1,13 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { updatePracticePhrase } from "@/shared/services/storage";
-import type { PracticePhrase } from "@/shared/types/models";
+import { archivePracticePhrase } from "@/shared/services/storage";
 import { showMutationError } from "@/shared/lib/showMutationError";
 import { practicePhrasesQueryKey } from "./usePracticePhrases";
 
-type UpdateArgs = {
-  id: string;
-  patch: Partial<Omit<PracticePhrase, "id">>;
-};
-
-/** 練習フレーズの一部フィールドを更新する */
-export function useUpdatePracticePhrase() {
+/** 練習フレーズをアーカイブする（今日の練習メニューから除外する） */
+export function useArchivePracticePhrase() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, patch }: UpdateArgs) => updatePracticePhrase(id, patch),
+    mutationFn: (id: string) => archivePracticePhrase(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: practicePhrasesQueryKey });
     },

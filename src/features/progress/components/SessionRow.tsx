@@ -28,7 +28,7 @@ function formatRelative(iso: string): string {
 
 type Props = {
   session: PracticeSession;
-  onDelete: (id: string) => void;
+  onDelete: (id: string) => void | Promise<void>;
 };
 
 export function SessionRow({ session, onDelete }: Props) {

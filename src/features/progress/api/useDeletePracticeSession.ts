@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { deletePracticeSession } from "@/shared/services/storage";
+import { showMutationError } from "@/shared/lib/showMutationError";
 import { practiceSessionsQueryKey } from "./usePracticeSessions";
 
 /** 練習セッションをAsyncStorageから削除する */
@@ -10,5 +11,6 @@ export function useDeletePracticeSession() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: practiceSessionsQueryKey });
     },
+    onError: showMutationError,
   });
 }

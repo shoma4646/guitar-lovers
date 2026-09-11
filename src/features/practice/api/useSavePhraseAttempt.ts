@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { savePhraseAttempt } from "@/shared/services/storage";
 import type { PhraseAttempt } from "@/shared/types/models";
+import { showMutationError } from "@/shared/lib/showMutationError";
 import { phraseAttemptsQueryKey } from "./usePhraseAttempts";
 
 /** フレーズ練習結果をAsyncStorageに保存する */
@@ -11,5 +12,6 @@ export function useSavePhraseAttempt() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: phraseAttemptsQueryKey });
     },
+    onError: showMutationError,
   });
 }
