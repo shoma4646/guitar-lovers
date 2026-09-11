@@ -23,6 +23,7 @@ import {
   StyleSheet,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useRouter } from "expo-router";
 import { Icon } from "@/shared/components/atoms/Icon";
 import { colors } from "@/shared/theme";
 import {
@@ -70,6 +71,7 @@ export function TunerScreen() {
   const [cents, setCents] = useState(0);
   const [tunedStrings, setTunedStrings] = useState<boolean[]>(UNTUNED_STRINGS);
 
+  const router = useRouter();
   const { status, hz, start, stop } = usePitchDetector();
   const isActive = status === "listening";
 
@@ -188,7 +190,13 @@ export function TunerScreen() {
           <Text className="font-bold text-headline-lg text-on-surface">
             Guitar Lovers
           </Text>
-          <Pressable className="active:opacity-70" hitSlop={8}>
+          <Pressable
+            onPress={() => router.push("/settings")}
+            className="active:opacity-70"
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="設定を開く"
+          >
             <Icon name="settings" size={24} color={colors.primary} />
           </Pressable>
         </View>

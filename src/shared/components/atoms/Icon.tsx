@@ -28,6 +28,7 @@ const ICON_MAP: Record<
   album: { set: "material", name: "album" },
   bolt: { set: "material", name: "bolt" },
   equalizer: { set: "material", name: "equalizer" },
+  error: { set: "material", name: "error" },
   history: { set: "material", name: "history" },
   mic: { set: "material", name: "mic" },
   play_arrow: { set: "material", name: "play-arrow" },

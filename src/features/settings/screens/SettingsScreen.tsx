@@ -29,7 +29,7 @@ type SectionProps = {
 
 function Section({ title, children }: SectionProps) {
   return (
-    <View className="mb-2xl">
+    <View className="mb-xl">
       <Text
         className="text-label-sm mb-sm"
         style={{

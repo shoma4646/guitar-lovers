@@ -7,7 +7,16 @@
  */
 
 import { useEffect, useState } from "react";
-import { View, Text, TextInput, Pressable, Modal, StyleSheet } from "react-native";
+import {
+  View,
+  Text,
+  TextInput,
+  Pressable,
+  Modal,
+  KeyboardAvoidingView,
+  Platform,
+  StyleSheet,
+} from "react-native";
 import { Icon } from "@/shared/components/atoms/Icon";
 import { colors } from "@/shared/theme";
 import type { PhraseAttempt, PracticePhrase } from "@/shared/types/models";
@@ -55,7 +64,10 @@ export function PhraseResultSheet({
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <View style={styles.overlay}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        style={styles.overlay}
+      >
         <View className="bg-surface-container-lowest" style={styles.sheet}>
           <View className="flex-row items-center justify-between">
             <Text
@@ -157,7 +169,7 @@ export function PhraseResultSheet({
             </Text>
           </Pressable>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

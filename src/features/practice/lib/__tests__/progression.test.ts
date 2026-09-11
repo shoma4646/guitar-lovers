@@ -33,20 +33,35 @@ describe("getLatestAttempt", () => {
 describe("computeTodayTargetBpm", () => {
   it("直近の結果がokなら+5する", () => {
     const attempt = makeAttempt({ result: "ok" });
-    expect(computeTodayTargetBpm(70, attempt)).toBe(75);
+    expect(computeTodayTargetBpm(70, attempt, 200)).toBe(75);
   });
 
   it("直近の結果がpartialなら据え置く", () => {
     const attempt = makeAttempt({ result: "partial" });
-    expect(computeTodayTargetBpm(70, attempt)).toBe(70);
+    expect(computeTodayTargetBpm(70, attempt, 200)).toBe(70);
   });
 
   it("直近の結果がngなら据え置く", () => {
     const attempt = makeAttempt({ result: "ng" });
-    expect(computeTodayTargetBpm(70, attempt)).toBe(70);
+    expect(computeTodayTargetBpm(70, attempt, 200)).toBe(70);
   });
 
   it("記録が無ければ据え置く", () => {
-    expect(computeTodayTargetBpm(70, undefined)).toBe(70);
+    expect(computeTodayTargetBpm(70, undefined, 200)).toBe(70);
+  });
+
+  it("目標BPMで頭打ちになる", () => {
+    const attempt = makeAttempt({ result: "ok" });
+    expect(computeTodayTargetBpm(98, attempt, 100)).toBe(100);
+  });
+
+  it("240で頭打ちになる", () => {
+    const attempt = makeAttempt({ result: "ok" });
+    expect(computeTodayTargetBpm(238, attempt, 300)).toBe(240);
+  });
+
+  it("既に目標BPMを超えていれば据え置く", () => {
+    const attempt = makeAttempt({ result: "ok" });
+    expect(computeTodayTargetBpm(150, attempt, 100)).toBe(150);
   });
 });

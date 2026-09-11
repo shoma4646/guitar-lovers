@@ -21,11 +21,13 @@ type Props = {
   initialRate?: number;
   onTimeUpdate: (time: number) => void;
   onDurationReady: (duration: number) => void;
+  /** YouTube IFrame APIのエラーコード、またはWebView自体の読み込み失敗時は-1を渡す */
+  onPlayerError: (code: number) => void;
 };
 
 export const VideoPlayerCard = forwardRef<WebView, Props>(
   function VideoPlayerCard(
-    { videoId, startSeconds = 0, initialRate = 1, onTimeUpdate, onDurationReady },
+    { videoId, startSeconds = 0, initialRate = 1, onTimeUpdate, onDurationReady, onPlayerError },
     ref,
   ) {
     return (
@@ -48,11 +50,14 @@ export const VideoPlayerCard = forwardRef<WebView, Props>(
                 onTimeUpdate(data.currentTime);
               } else if (data.type === "ready") {
                 onDurationReady(data.duration);
+              } else if (data.type === "error") {
+                onPlayerError(data.code);
               }
             } catch {
               // ignore
             }
           }}
+          onError={() => onPlayerError(-1)}
         />
       </View>
     );
@@ -62,6 +67,7 @@ export const VideoPlayerCard = forwardRef<WebView, Props>(
 const styles = StyleSheet.create({
   videoCard: {
     height: (SCREEN_WIDTH - 40) * (9 / 16),
+    minHeight: 200,
     borderRadius: 16,
     marginBottom: 16,
   },

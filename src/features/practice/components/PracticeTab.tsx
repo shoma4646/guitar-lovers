@@ -23,6 +23,7 @@ import { useAddRecentVideo } from "@/features/practice/api/useAddRecentVideo";
 import { useSavePracticePhrase } from "@/features/practice/api/useSavePracticePhrase";
 import { useUpdatePracticePhrase } from "@/features/practice/api/useUpdatePracticePhrase";
 import { useSavePhraseAttempt } from "@/features/practice/api/useSavePhraseAttempt";
+import { useVideoPresets } from "@/features/practice/api/useVideoPresets";
 import { MetronomeWidget } from "./MetronomeWidget";
 import { VideoLoaderCard } from "./VideoLoaderCard";
 import { VideoPlayerCard } from "./VideoPlayerCard";
@@ -33,6 +34,17 @@ import { BookmarksCard } from "./BookmarksCard";
 import { TodayMenuCard } from "./TodayMenuCard";
 import { PhraseResultSheet } from "./PhraseResultSheet";
 import { cardShadowStyle, cardStyle } from "./cardStyle";
+
+/** YouTube IFrame APIのエラーコードから、ユーザー向けの案内文を返す */
+function describePlayerError(code: number): string {
+  if (code === 101 || code === 150) {
+    return "この動画は埋め込み再生が許可されていません";
+  }
+  if (code === 100) {
+    return "動画が見つかりません（削除・非公開の可能性）";
+  }
+  return "読み込みに失敗しました。通信状況を確認してください";
+}
 
 export function PracticeTab() {
   const urlInput = usePracticeStore((s) => s.urlInput);
@@ -62,21 +74,29 @@ export function PracticeTab() {
   const resetPracticeTimer = usePracticeStore((s) => s.resetPracticeTimer);
   const videoStartSeconds = usePracticeStore((s) => s.videoStartSeconds);
   const videoInitialRate = usePracticeStore((s) => s.videoInitialRate);
+  const videoLoadNonce = usePracticeStore((s) => s.videoLoadNonce);
+  const clearVideo = usePracticeStore((s) => s.clearVideo);
+  // 「今日の練習メニュー」から開始したフレーズ練習。サブタブ切替をまたいで保持するためストアで管理する
+  const activePractice = usePracticeStore((s) => s.activePhrasePractice);
+  const setActivePractice = usePracticeStore((s) => s.setActivePhrasePractice);
 
   const { mutate: addRecent } = useAddRecentVideo();
   const { mutateAsync: saveSession } = useSavePracticeSession();
   const { mutate: savePhrase } = useSavePracticePhrase();
-  const { mutate: updatePhrase } = useUpdatePracticePhrase();
-  const { mutate: saveAttempt } = useSavePhraseAttempt();
+  const { mutateAsync: updatePhraseAsync } = useUpdatePracticePhrase();
+  const { mutateAsync: saveAttemptAsync } = useSavePhraseAttempt();
+  const { data: presets = [] } = useVideoPresets();
 
-  // 「今日の練習メニュー」から開始したフレーズ練習。設定中は結果記録バナーを表示する
-  const [activePractice, setActivePractice] = useState<{
-    phrase: PracticePhrase;
-    todayTargetBpm: number;
-  } | null>(null);
   const [showResultSheet, setShowResultSheet] = useState(false);
+  /** 動画プレイヤーのエラー。nullなら正常 */
+  const [playerError, setPlayerError] = useState<number | null>(null);
 
   const webViewRef = useRef<WebView>(null);
+
+  // loadVideo呼び出し（videoLoadNonce変化）のたびに前回のエラー表示をクリアする
+  useEffect(() => {
+    setPlayerError(null);
+  }, [videoLoadNonce]);
 
   const sendToPlayer = useCallback((cmd: Record<string, unknown>) => {
     webViewRef.current?.postMessage(JSON.stringify(cmd));
@@ -163,20 +183,25 @@ export function PracticeTab() {
         return;
       }
       const now = new Date().toISOString();
-      savePhrase({
-        id: randomUUID(),
-        videoId: loadedVideoId,
-        videoTitle: videoTitle || `YouTube動画 (${loadedVideoId})`,
-        name: input.name,
-        startSec: abLoop.pointA,
-        endSec: abLoop.pointB,
-        currentBpm: input.currentBpm,
-        targetBpm: input.targetBpm,
-        playbackRate,
-        createdAt: now,
-        updatedAt: now,
-      });
-      Alert.alert("保存しました", `「${input.name}」を今日の練習メニューに追加しました`);
+      savePhrase(
+        {
+          id: randomUUID(),
+          videoId: loadedVideoId,
+          videoTitle: videoTitle || `YouTube動画 (${loadedVideoId})`,
+          name: input.name,
+          startSec: abLoop.pointA,
+          endSec: abLoop.pointB,
+          currentBpm: input.currentBpm,
+          targetBpm: input.targetBpm,
+          playbackRate,
+          createdAt: now,
+          updatedAt: now,
+        },
+        {
+          onSuccess: () =>
+            Alert.alert("保存しました", `「${input.name}」を今日の練習メニューに追加しました`),
+        },
+      );
     },
     [loadedVideoId, videoTitle, abLoop.pointA, abLoop.pointB, playbackRate, savePhrase],
   );
@@ -191,7 +216,7 @@ export function PracticeTab() {
       setMetronomeBpm(todayTargetBpm);
       setActivePractice({ phrase, todayTargetBpm });
     },
-    [loadVideo, setMetronomeBpm],
+    [loadVideo, setMetronomeBpm, setActivePractice],
   );
 
   const handleFinishPractice = useCallback(() => {
@@ -199,27 +224,43 @@ export function PracticeTab() {
   }, []);
 
   const handleSubmitResult = useCallback(
-    ({ bpm, result }: { bpm: number; result: "ok" | "partial" | "ng" }) => {
+    async ({ bpm, result }: { bpm: number; result: "ok" | "partial" | "ng" }) => {
       if (!activePractice) return;
       const now = new Date().toISOString();
-      saveAttempt({
-        id: randomUUID(),
-        phraseId: activePractice.phrase.id,
-        date: now,
-        bpm,
-        result,
-      });
-      if (result === "ok") {
-        updatePhrase({
-          id: activePractice.phrase.id,
-          patch: { currentBpm: bpm, updatedAt: now },
+      try {
+        await saveAttemptAsync({
+          id: randomUUID(),
+          phraseId: activePractice.phrase.id,
+          date: now,
+          bpm,
+          result,
         });
+        if (result === "ok") {
+          await updatePhraseAsync({
+            id: activePractice.phrase.id,
+            patch: { currentBpm: bpm, updatedAt: now },
+          });
+        }
+      } catch {
+        // 失敗時はshowMutationErrorがAlertを表示済み。シートと練習状態は保持し再送できるようにする
+        return;
       }
       setShowResultSheet(false);
       setActivePractice(null);
     },
-    [activePractice, saveAttempt, updatePhrase],
+    [activePractice, saveAttemptAsync, updatePhraseAsync, setActivePractice],
   );
+
+  const handleTryPreset = useCallback(() => {
+    const preset = presets[0];
+    if (!preset) return;
+    loadVideo(preset.videoId, preset.title);
+    addRecent({
+      videoId: preset.videoId,
+      title: preset.title,
+      lastWatchedAt: new Date().toISOString(),
+    });
+  }, [presets, loadVideo, addRecent]);
 
   return (
     <>
@@ -228,7 +269,7 @@ export function PracticeTab() {
         showsVerticalScrollIndicator={false}
       >
         {/* 今日の練習メニュー */}
-        <TodayMenuCard onStartPhrase={handleStartPhrase} />
+        <TodayMenuCard onStartPhrase={handleStartPhrase} onTryPreset={handleTryPreset} />
 
         {/* 練習中のフレーズ（今日の練習メニューから開始した場合のみ表示） */}
         {activePractice && (
@@ -291,14 +332,57 @@ export function PracticeTab() {
         />
 
         {/* Video Player (if loaded) */}
-        {loadedVideoId && (
+        {loadedVideoId && playerError !== null && (
+          <View
+            className="bg-surface-container-lowest items-center"
+            style={[cardStyle, cardShadowStyle, { marginBottom: 16, gap: 12 }]}
+          >
+            <Icon name="error" size={28} color={colors.error} />
+            <Text
+              className="text-body-md text-center"
+              style={{ color: colors.onSurface, fontWeight: "600" }}
+            >
+              この動画は再生できません
+            </Text>
+            <Text
+              className="text-label-sm text-center"
+              style={{ color: colors.onSurfaceVariant }}
+            >
+              {describePlayerError(playerError)}
+            </Text>
+            <Pressable
+              onPress={() => {
+                clearVideo();
+                setPlayerError(null);
+              }}
+              className="active:opacity-90"
+              style={{
+                paddingHorizontal: 20,
+                paddingVertical: 10,
+                borderRadius: 9999,
+                backgroundColor: colors.primary,
+              }}
+              accessibilityRole="button"
+            >
+              <Text
+                className="text-label-sm"
+                style={{ color: colors.onPrimary, fontWeight: "700" }}
+              >
+                別の動画を読み込む
+              </Text>
+            </Pressable>
+          </View>
+        )}
+        {loadedVideoId && playerError === null && (
           <VideoPlayerCard
+            key={videoLoadNonce}
             ref={webViewRef}
             videoId={loadedVideoId}
             startSeconds={videoStartSeconds}
             initialRate={videoInitialRate}
             onTimeUpdate={setCurrentTime}
             onDurationReady={setDuration}
+            onPlayerError={setPlayerError}
           />
         )}
 

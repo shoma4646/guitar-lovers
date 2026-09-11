@@ -4,7 +4,10 @@
  */
 
 import { create } from "zustand";
-import type { ABLoop, Bookmark } from "@/shared/types/models";
+import type { ABLoop, Bookmark, PracticePhrase } from "@/shared/types/models";
+
+/** 練習タブ内のサブタブ */
+export type PracticeSubTab = "practice" | "presets" | "favorites";
 
 /** 再生速度の選択肢 */
 export const PLAYBACK_RATES = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0] as const;
@@ -42,6 +45,19 @@ interface PracticeState {
    * （同上の理由でWebView再読み込みを避けるため）
    */
   videoInitialRate: PlaybackRate;
+  /**
+   * loadVideo呼び出しのたびにインクリメントされる値
+   * WebViewのkeyに渡し、HTML文字列が同一でも強制再マウント（＝再読み込み）させるために使う
+   */
+  videoLoadNonce: number;
+
+  // --- 練習サブタブ ---
+  /** Practice画面のサブタブ選択状態。Presets/Favoritesからの再生後に「練習」へ戻すため画面遷移をまたいで保持する */
+  practiceSubTab: PracticeSubTab;
+
+  // --- 練習中のフレーズ ---
+  /** 「今日の練習メニュー」から開始した練習中フレーズ。サブタブ切替で消えないようストアに保持する */
+  activePhrasePractice: { phrase: PracticePhrase; todayTargetBpm: number } | null;
 
   // --- 練習時間 ---
   /** 練習タイマー開始時刻 */
@@ -88,6 +104,10 @@ interface PracticeState {
   removeBookmark: (id: string) => void;
   setMetronomeBpm: (bpm: number) => void;
   setMetronomeEnabled: (enabled: boolean) => void;
+  setPracticeSubTab: (tab: PracticeSubTab) => void;
+  setActivePhrasePractice: (
+    value: { phrase: PracticePhrase; todayTargetBpm: number } | null,
+  ) => void;
   /**
    * 現在の累計練習時間を分単位で返す
    * タイマー計測中の場合は経過時間も含めて計算する
@@ -122,6 +142,9 @@ export const usePracticeStore = create<PracticeState>((set, get) => ({
   playbackRate: 1.0,
   videoStartSeconds: 0,
   videoInitialRate: 1.0,
+  videoLoadNonce: 0,
+  practiceSubTab: "practice",
+  activePhrasePractice: null,
   practiceStartTime: null,
   elapsedSeconds: 0,
   abLoop: { pointA: null, pointB: null, enabled: false },
@@ -137,7 +160,7 @@ export const usePracticeStore = create<PracticeState>((set, get) => ({
     const id = extractVideoId(videoId) ?? videoId;
     // 速度未指定時は現在選択中の速度を維持する（WebView側にも改めて焼き込む）
     const nextPlaybackRate = options?.playbackRate ?? get().playbackRate;
-    set({
+    set((state) => ({
       loadedVideoId: id,
       videoTitle: title,
       isPlaying: false,
@@ -146,9 +169,10 @@ export const usePracticeStore = create<PracticeState>((set, get) => ({
       videoStartSeconds: options?.abLoop?.pointA ?? 0,
       videoInitialRate: nextPlaybackRate,
       playbackRate: nextPlaybackRate,
+      videoLoadNonce: state.videoLoadNonce + 1,
       abLoop: options?.abLoop ?? { pointA: null, pointB: null, enabled: false },
       bookmarks: [],
-    });
+    }));
   },
 
   clearVideo: () =>
@@ -208,6 +232,8 @@ export const usePracticeStore = create<PracticeState>((set, get) => ({
 
   setMetronomeBpm: (bpm) => set({ metronomeBpm: Math.max(40, Math.min(240, bpm)) }),
   setMetronomeEnabled: (enabled) => set({ metronomeEnabled: enabled }),
+  setPracticeSubTab: (tab) => set({ practiceSubTab: tab }),
+  setActivePhrasePractice: (value) => set({ activePhrasePractice: value }),
 
   getPracticeMinutes: () => {
     const { practiceStartTime, elapsedSeconds } = get();

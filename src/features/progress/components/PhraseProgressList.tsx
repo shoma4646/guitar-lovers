@@ -2,7 +2,7 @@
  * フレーズ別BPM推移リスト（Progress画面の上段・主役）
  *
  * 保存済みフレーズごとに「開始BPM → 現在BPM → 目標BPM」を進捗バーで表示する。
- * フレーズが1件も無ければ何も描画しない（Practiceタブ側の空状態案内に譲る）。
+ * フレーズが1件も無ければ、同じカード枠内に案内文を表示する。
  */
 
 import { useMemo } from "react";
@@ -19,6 +19,7 @@ export function PhraseProgressList() {
   const summaries = useMemo(() => {
     if (!phrases) return [];
     return phrases
+      .filter((phrase) => !phrase.archivedAt)
       .map((phrase) =>
         summarizePhraseProgress(
           phrase,
@@ -31,8 +32,6 @@ export function PhraseProgressList() {
           new Date(a.phrase.updatedAt).getTime(),
       );
   }, [phrases, attempts]);
-
-  if (summaries.length === 0) return null;
 
   return (
     <View
@@ -51,40 +50,46 @@ export function PhraseProgressList() {
       >
         フレーズの上達
       </Text>
-      <View style={{ gap: 16 }}>
-        {summaries.map(({ phrase, startBpm, currentBpm, targetBpm, progressRatio }) => (
-          <View key={phrase.id} style={{ gap: 6 }}>
-            <View className="flex-row items-center justify-between">
-              <Text
-                className="text-body-md"
-                style={{ color: colors.onSurface, fontWeight: "600", flex: 1 }}
-                numberOfLines={1}
-              >
-                {phrase.name}
-              </Text>
-              <Text
-                className="text-label-sm"
-                style={{
-                  color: colors.onSurfaceVariant,
-                  fontVariant: ["tabular-nums"],
-                }}
-              >
-                {startBpm} → {currentBpm} / 目標{targetBpm}
-              </Text>
+      {summaries.length === 0 ? (
+        <Text className="text-on-surface-variant text-body-md">
+          Practiceタブでフレーズを保存すると、ここにBPMの推移が表示されます
+        </Text>
+      ) : (
+        <View style={{ gap: 16 }}>
+          {summaries.map(({ phrase, startBpm, currentBpm, targetBpm, progressRatio }) => (
+            <View key={phrase.id} style={{ gap: 6 }}>
+              <View className="flex-row items-center justify-between">
+                <Text
+                  className="text-body-md"
+                  style={{ color: colors.onSurface, fontWeight: "600", flex: 1 }}
+                  numberOfLines={1}
+                >
+                  {phrase.name}
+                </Text>
+                <Text
+                  className="text-label-sm"
+                  style={{
+                    color: colors.onSurfaceVariant,
+                    fontVariant: ["tabular-nums"],
+                  }}
+                >
+                  {startBpm} → {currentBpm} / 目標{targetBpm}
+                </Text>
+              </View>
+              <View style={styles.track}>
+                <View
+                  style={{
+                    width: `${Math.round(progressRatio * 100)}%`,
+                    height: "100%",
+                    borderRadius: 9999,
+                    backgroundColor: colors.tertiary,
+                  }}
+                />
+              </View>
             </View>
-            <View style={styles.track}>
-              <View
-                style={{
-                  width: `${Math.round(progressRatio * 100)}%`,
-                  height: "100%",
-                  borderRadius: 9999,
-                  backgroundColor: colors.tertiary,
-                }}
-              />
-            </View>
-          </View>
-        ))}
-      </View>
+          ))}
+        </View>
+      )}
     </View>
   );
 }

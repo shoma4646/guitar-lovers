@@ -13,6 +13,8 @@ import {
   Pressable,
   Modal,
   Alert,
+  KeyboardAvoidingView,
+  Platform,
   StyleSheet,
 } from "react-native";
 import { Icon } from "@/shared/components/atoms/Icon";
@@ -221,7 +223,10 @@ export function ABLoopCard({
         transparent
         onRequestClose={() => setShowSaveModal(false)}
       >
-        <View style={styles.overlay}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          style={styles.overlay}
+        >
           <View
             className="bg-surface-container-lowest"
             style={styles.sheet}
@@ -320,7 +325,7 @@ export function ABLoopCard({
               </Text>
             </Pressable>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );
