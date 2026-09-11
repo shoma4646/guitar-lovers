@@ -45,13 +45,21 @@ function isValidLoopRange(abLoop: ABLoop): boolean {
 
 /** YouTube IFrame APIのエラーコードから、ユーザー向けの案内文を返す */
 function describePlayerError(code: number): string {
-  if (code === 101 || code === 150) {
-    return "この動画は埋め込み再生が許可されていません";
+  switch (code) {
+    case 101:
+    case 150:
+      return "この動画は埋め込み再生が許可されていません";
+    case 100:
+      return "動画が見つかりません（削除・非公開の可能性）";
+    case 2:
+      return "動画IDが正しくありません。URLを確認してください";
+    case 5:
+      return "プレイヤーでエラーが発生しました。しばらくしてからやり直してください";
+    case -1:
+      return "読み込みに失敗しました。通信状況を確認してください";
+    default:
+      return "動画を読み込めませんでした。URLと通信状況を確認してください";
   }
-  if (code === 100) {
-    return "動画が見つかりません（削除・非公開の可能性）";
-  }
-  return "読み込みに失敗しました。通信状況を確認してください";
 }
 
 export function PracticeTab() {
@@ -95,15 +103,12 @@ export function PracticeTab() {
   const { data: presets = [] } = useVideoPresets();
 
   const [showResultSheet, setShowResultSheet] = useState(false);
-  /** 動画プレイヤーのエラー。nullなら正常 */
-  const [playerError, setPlayerError] = useState<number | null>(null);
+  const playerError = usePracticeStore((s) => s.playerError);
+  const setPlayerError = usePracticeStore((s) => s.setPlayerError);
+  const pendingAttemptId = usePracticeStore((s) => s.pendingAttemptId);
+  const beginResultEntry = usePracticeStore((s) => s.beginResultEntry);
 
   const webViewRef = useRef<WebView>(null);
-
-  // loadVideo呼び出し（videoLoadNonce変化）のたびに前回のエラー表示をクリアする
-  useEffect(() => {
-    setPlayerError(null);
-  }, [videoLoadNonce]);
 
   const sendToPlayer = useCallback((cmd: Record<string, unknown>) => {
     webViewRef.current?.postMessage(JSON.stringify(cmd));
@@ -186,10 +191,11 @@ export function PracticeTab() {
 
   const handleSavePhrase = useCallback(
     (input: SavePhraseInput) => {
-      if (!loadedVideoId || abLoop.pointA === null || abLoop.pointB === null) {
+      if (!loadedVideoId) {
+        Alert.alert("エラー", "動画を読み込んでから保存してください");
         return;
       }
-      if (!isValidLoopRange(abLoop)) {
+      if (abLoop.pointA === null || abLoop.pointB === null || !isValidLoopRange(abLoop)) {
         Alert.alert("エラー", "B点はA点より後に設定してください");
         return;
       }
@@ -224,20 +230,17 @@ export function PracticeTab() {
     [startPhrasePractice],
   );
 
-  // 結果記録のattempt IDはシートを開いた時点で固定し、保存失敗後の再送で重複しないようにする
-  const pendingAttemptIdRef = useRef<string | null>(null);
-
   const handleFinishPractice = useCallback(() => {
-    pendingAttemptIdRef.current = randomUUID();
+    beginResultEntry(randomUUID());
     setShowResultSheet(true);
-  }, []);
+  }, [beginResultEntry]);
 
   const handleSubmitResult = useCallback(
     async ({ bpm, result }: { bpm: number; result: "ok" | "partial" | "ng" }) => {
       if (!activePractice) return;
       try {
         await recordResultAsync({
-          id: pendingAttemptIdRef.current ?? randomUUID(),
+          id: pendingAttemptId ?? randomUUID(),
           phraseId: activePractice.phrase.id,
           date: new Date().toISOString(),
           bpm,
@@ -247,11 +250,10 @@ export function PracticeTab() {
         // 失敗時はshowMutationErrorがAlertを表示済み。シートと練習状態は保持し再送できるようにする
         return;
       }
-      pendingAttemptIdRef.current = null;
       setShowResultSheet(false);
       setActivePractice(null);
     },
-    [activePractice, recordResultAsync, setActivePractice],
+    [activePractice, pendingAttemptId, recordResultAsync, setActivePractice],
   );
 
   const handleTryPreset = useCallback(() => {
@@ -354,10 +356,7 @@ export function PracticeTab() {
               {describePlayerError(playerError)}
             </Text>
             <Pressable
-              onPress={() => {
-                clearVideo();
-                setPlayerError(null);
-              }}
+              onPress={clearVideo}
               className="active:opacity-90"
               style={{
                 paddingHorizontal: 20,

@@ -3,7 +3,7 @@ import { archivePracticePhrase } from "@/shared/services/storage";
 import { showMutationError } from "@/shared/lib/showMutationError";
 import { practicePhrasesQueryKey } from "./usePracticePhrases";
 
-/** 練習フレーズをアーカイブする（今日の練習メニューから除外する） */
+/** 練習フレーズをアーカイブする（今日の練習メニューと進捗一覧に表示しない。記録は保持する） */
 export function useArchivePracticePhrase() {
   const queryClient = useQueryClient();
   return useMutation({

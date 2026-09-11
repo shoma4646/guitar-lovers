@@ -51,7 +51,7 @@ export const VideoPlayerCard = forwardRef<WebView, Props>(
               } else if (data.type === "ready") {
                 onDurationReady(data.duration);
               } else if (data.type === "error") {
-                onPlayerError(data.code);
+                onPlayerError(typeof data.code === "number" ? data.code : -1);
               }
             } catch {
               // ignore

@@ -17,6 +17,7 @@ import { favoriteVideoSchema } from "@/shared/lib/schemas/favoriteVideo";
 import { recentVideoSchema } from "@/shared/lib/schemas/recentVideo";
 import { practicePhraseSchema } from "@/shared/lib/schemas/practicePhrase";
 import { phraseAttemptSchema } from "@/shared/lib/schemas/phraseAttempt";
+import { clampBpm } from "@/shared/constants/bpm";
 
 /** ストレージキーの定義 */
 export const STORAGE_KEYS = {
@@ -71,17 +72,21 @@ async function readList<T>(
   }
 
   const result: T[] = [];
-  let droppedCount = 0;
+  const dropped: unknown[] = [];
   for (const item of raw) {
     const parsed = itemSchema.safeParse(item);
     if (parsed.success) {
       result.push(parsed.data);
     } else {
-      droppedCount++;
+      dropped.push(item);
     }
   }
-  if (droppedCount > 0) {
-    console.warn(`[storage] ${key}で壊れた要素を${droppedCount}件破棄しました`);
+  if (dropped.length > 0) {
+    console.warn(`[storage] ${key}で壊れた要素を${dropped.length}件除外し退避します`);
+    await AsyncStorage.setItem(
+      `${key}__dropped_${Date.now()}`,
+      JSON.stringify(dropped)
+    );
   }
   return result;
 }
@@ -90,8 +95,59 @@ async function readList<T>(
 // スキーマバージョン管理
 // ============================================================
 
-/** 現在のストレージスキーマバージョン */
-const SCHEMA_VERSION = 1;
+/**
+ * 現在のストレージスキーマバージョン
+ * 2: BPMを40〜240の整数に限定し、区間はstartSec < endSecを必須にした
+ */
+const SCHEMA_VERSION = 2;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function normalizeBpm(value: unknown): unknown {
+  return typeof value === "number" && Number.isFinite(value)
+    ? clampBpm(Math.round(value))
+    : value;
+}
+
+/** キーの生JSON配列を要素ごとに変換して書き戻す（スキーマ検証前の移行用） */
+async function rewriteRawList(
+  key: string,
+  mapItem: (item: unknown) => unknown
+): Promise<void> {
+  const json = await AsyncStorage.getItem(key);
+  if (!json) return;
+  let raw: unknown;
+  try {
+    raw = JSON.parse(json);
+  } catch {
+    return;
+  }
+  if (!Array.isArray(raw)) return;
+  await AsyncStorage.setItem(key, JSON.stringify(raw.map(mapItem)));
+}
+
+/** バージョン2への移行: 旧ビルドが検証せずに保存したBPMと区間を新スキーマに収まる値へ補正する */
+async function migrateToV2(): Promise<void> {
+  await rewriteRawList(STORAGE_KEYS.PRACTICE_PHRASES, (item) => {
+    if (!isRecord(item)) return item;
+    const { startSec, endSec } = item;
+    const needsEndFix =
+      typeof startSec === "number" &&
+      typeof endSec === "number" &&
+      endSec <= startSec;
+    return {
+      ...item,
+      currentBpm: normalizeBpm(item.currentBpm),
+      targetBpm: normalizeBpm(item.targetBpm),
+      endSec: needsEndFix ? startSec + 1 : endSec,
+    };
+  });
+  await rewriteRawList(STORAGE_KEYS.PHRASE_ATTEMPTS, (item) =>
+    isRecord(item) ? { ...item, bpm: normalizeBpm(item.bpm) } : item
+  );
+}
 
 /**
  * ストレージのスキーマバージョンを確認し、必要なら移行処理を行う
@@ -104,10 +160,8 @@ export async function migrateIfNeeded(): Promise<void> {
 
     if (version >= SCHEMA_VERSION) return;
 
-    switch (version) {
-      // 将来のバージョン間マイグレーションをここに追加する
-      default:
-        break;
+    if (version < 2) {
+      await migrateToV2();
     }
 
     await AsyncStorage.setItem(
@@ -270,7 +324,7 @@ export async function updatePracticePhrase(
 }
 
 /**
- * 練習フレーズをアーカイブする（今日の練習メニューから除外する）
+ * 練習フレーズをアーカイブする（今日の練習メニューと進捗一覧に表示しない。記録は保持する）
  * @param id - アーカイブするフレーズのID
  */
 export async function archivePracticePhrase(id: string): Promise<void> {
@@ -328,18 +382,23 @@ export async function savePhraseAttempt(
 
 /**
  * フレーズ練習の結果を記録し、弾けた場合はフレーズの到達BPMを引き上げる
+ * 対象フレーズが無ければ例外にする（削除済みフレーズへの孤児記録を防ぐ）。
  * attemptのIDをキーにした置き換え保存なので、途中で失敗しても同じ入力で再実行できる
  * @param attempt - 記録する練習結果
  */
 export async function recordPhraseResult(attempt: PhraseAttempt): Promise<void> {
-  await savePhraseAttempt(attempt);
-  if (attempt.result !== "ok") return;
-
   const phrases = await getPracticePhrases();
   const phrase = phrases.find((p) => p.id === attempt.phraseId);
-  if (!phrase || phrase.currentBpm >= attempt.bpm) return;
-  await updatePracticePhrase(phrase.id, {
-    currentBpm: attempt.bpm,
-    updatedAt: attempt.date,
-  });
+  if (!phrase) {
+    throw new Error("記録対象のフレーズが見つかりません");
+  }
+
+  // 到達BPMを先に更新する。attemptだけ残ると「弾けた記録があるのに到達BPMが低い」状態になるため
+  if (attempt.result === "ok" && phrase.currentBpm < attempt.bpm) {
+    await updatePracticePhrase(phrase.id, {
+      currentBpm: attempt.bpm,
+      updatedAt: attempt.date,
+    });
+  }
+  await savePhraseAttempt(attempt);
 }

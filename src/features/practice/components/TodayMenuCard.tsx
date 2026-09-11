@@ -13,6 +13,7 @@ import { usePracticePhrases } from "@/features/practice/api/usePracticePhrases";
 import { usePhraseAttempts } from "@/features/practice/api/usePhraseAttempts";
 import { useArchivePracticePhrase } from "@/features/practice/api/useArchivePracticePhrase";
 import { useDeletePracticePhrase } from "@/features/practice/api/useDeletePracticePhrase";
+import { usePracticeStore } from "@/stores/practice";
 import {
   computeTodayTargetBpm,
   getLatestAttempt,
@@ -52,10 +53,29 @@ export function TodayMenuCard({ onStartPhrase, onTryPreset }: Props) {
 
   const isLoading = isLoadingPhrases || isLoadingAttempts;
 
+  const activePhraseId = usePracticeStore(
+    (s) => s.activePhrasePractice?.phrase.id ?? null,
+  );
+  const setActivePhrasePractice = usePracticeStore((s) => s.setActivePhrasePractice);
+
+  // 練習中のフレーズを消したら、結果が消えたフレーズへ記録されないよう練習中状態も解除する
+  const clearIfActive = useCallback(
+    (phraseId: string) => {
+      if (activePhraseId === phraseId) {
+        setActivePhrasePractice(null);
+      }
+    },
+    [activePhraseId, setActivePhrasePractice],
+  );
+
   const handleLongPress = useCallback(
     (phrase: PracticePhrase) => {
       Alert.alert(phrase.name, "このフレーズをどうしますか？", [
-        { text: "アーカイブ", onPress: () => archivePhrase(phrase.id) },
+        {
+          text: "アーカイブ",
+          onPress: () =>
+            archivePhrase(phrase.id, { onSuccess: () => clearIfActive(phrase.id) }),
+        },
         {
           text: "削除",
           style: "destructive",
@@ -65,14 +85,15 @@ export function TodayMenuCard({ onStartPhrase, onTryPreset }: Props) {
               {
                 text: "削除する",
                 style: "destructive",
-                onPress: () => deletePhrase(phrase.id),
+                onPress: () =>
+                  deletePhrase(phrase.id, { onSuccess: () => clearIfActive(phrase.id) }),
               },
             ]),
         },
         { text: "キャンセル", style: "cancel" },
       ]);
     },
-    [archivePhrase, deletePhrase],
+    [archivePhrase, deletePhrase, clearIfActive],
   );
 
   return (

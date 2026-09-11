@@ -6,18 +6,12 @@
 import { create } from "zustand";
 import type { ABLoop, Bookmark, PracticePhrase } from "@/shared/types/models";
 import { clampBpm } from "@/shared/constants/bpm";
+import type { PlaybackRate } from "@/shared/constants/playback";
 
 /** 練習タブ内のサブタブ */
 export type PracticeSubTab = "practice" | "presets" | "favorites";
 
-/** 再生速度の選択肢 */
-export const PLAYBACK_RATES = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0] as const;
-export type PlaybackRate = (typeof PLAYBACK_RATES)[number];
-
-/** 永続化された再生速度を選択肢のいずれかに丸める（選択肢に無い値は等速扱い） */
-function toPlaybackRate(value: number): PlaybackRate {
-  return PLAYBACK_RATES.find((rate) => rate === value) ?? 1.0;
-}
+export { PLAYBACK_RATES, type PlaybackRate } from "@/shared/constants/playback";
 
 /** プリセットBPMの選択肢 */
 export const PRESET_BPMS = [60, 80, 100, 120, 140, 160] as const;
@@ -31,8 +25,6 @@ interface PracticeState {
   loadedVideoId: string | null;
   /** 動画タイトル */
   videoTitle: string;
-  /** 再生中かどうか */
-  isPlaying: boolean;
   /** 現在の再生位置（秒） */
   currentTime: number;
   /** 動画の総時間（秒） */
@@ -64,6 +56,15 @@ interface PracticeState {
   // --- 練習中のフレーズ ---
   /** 「今日の練習メニュー」から開始した練習中フレーズ。サブタブ切替で消えないようストアに保持する */
   activePhrasePractice: { phrase: PracticePhrase; todayTargetBpm: number } | null;
+  /**
+   * 結果記録中のattempt ID。保存失敗後の再送で同じIDを使い重複記録を防ぐため、
+   * 練習中フレーズと同じ寿命でストアに保持する
+   */
+  pendingAttemptId: string | null;
+
+  // --- 動画プレイヤーのエラー ---
+  /** YouTubeプレイヤーのエラーコード（-1は読み込み失敗）。nullなら正常。動画を切り替えるまで保持する */
+  playerError: number | null;
 
   // --- 練習時間 ---
   /** 練習タイマー開始時刻 */
@@ -101,7 +102,6 @@ interface PracticeState {
    * 動画・区間・再生速度・メトロノームBPM・練習中フレーズを一貫して設定する唯一の入口
    */
   startPhrasePractice: (phrase: PracticePhrase, todayTargetBpm: number) => void;
-  setIsPlaying: (playing: boolean) => void;
   setCurrentTime: (time: number) => void;
   setDuration: (duration: number) => void;
   setPlaybackRate: (rate: PlaybackRate) => void;
@@ -119,6 +119,9 @@ interface PracticeState {
   setActivePhrasePractice: (
     value: { phrase: PracticePhrase; todayTargetBpm: number } | null,
   ) => void;
+  /** 結果記録を開始し、未発番なら新しいattempt IDを発番して返す（再送時は同じIDを返す） */
+  beginResultEntry: (newId: string) => string;
+  setPlayerError: (code: number | null) => void;
   /**
    * 現在の累計練習時間を分単位で返す
    * タイマー計測中の場合は経過時間も含めて計算する
@@ -147,7 +150,6 @@ export const usePracticeStore = create<PracticeState>((set, get) => ({
   urlInput: "",
   loadedVideoId: null,
   videoTitle: "",
-  isPlaying: false,
   currentTime: 0,
   duration: 0,
   playbackRate: 1.0,
@@ -156,6 +158,8 @@ export const usePracticeStore = create<PracticeState>((set, get) => ({
   videoLoadNonce: 0,
   practiceSubTab: "practice",
   activePhrasePractice: null,
+  pendingAttemptId: null,
+  playerError: null,
   practiceStartTime: null,
   elapsedSeconds: 0,
   abLoop: { pointA: null, pointB: null, enabled: false },
@@ -174,7 +178,6 @@ export const usePracticeStore = create<PracticeState>((set, get) => ({
     set((state) => ({
       loadedVideoId: id,
       videoTitle: title,
-      isPlaying: false,
       currentTime: 0,
       duration: 0,
       videoStartSeconds: options?.abLoop?.pointA ?? 0,
@@ -185,13 +188,15 @@ export const usePracticeStore = create<PracticeState>((set, get) => ({
       bookmarks: [],
       // 別の動画に切り替えたら、前のフレーズへ結果が記録されないよう練習中状態を解除する
       activePhrasePractice: null,
+      pendingAttemptId: null,
+      playerError: null,
     }));
   },
 
   startPhrasePractice: (phrase, todayTargetBpm) => {
     get().loadVideo(phrase.videoId, phrase.videoTitle, {
       abLoop: { pointA: phrase.startSec, pointB: phrase.endSec, enabled: true },
-      playbackRate: toPlaybackRate(phrase.playbackRate),
+      playbackRate: phrase.playbackRate,
     });
     set({
       activePhrasePractice: { phrase, todayTargetBpm },
@@ -203,16 +208,18 @@ export const usePracticeStore = create<PracticeState>((set, get) => ({
     set({
       loadedVideoId: null,
       videoTitle: "",
-      isPlaying: false,
       currentTime: 0,
       duration: 0,
       videoStartSeconds: 0,
       videoInitialRate: 1.0,
       urlInput: "",
+      abLoop: { pointA: null, pointB: null, enabled: false },
+      bookmarks: [],
       activePhrasePractice: null,
+      pendingAttemptId: null,
+      playerError: null,
     }),
 
-  setIsPlaying: (playing) => set({ isPlaying: playing }),
   setCurrentTime: (time) => set({ currentTime: time }),
   setDuration: (duration) => set({ duration }),
   setPlaybackRate: (rate) => set({ playbackRate: rate }),
@@ -258,7 +265,18 @@ export const usePracticeStore = create<PracticeState>((set, get) => ({
   setMetronomeBpm: (bpm) => set({ metronomeBpm: clampBpm(bpm) }),
   setMetronomeEnabled: (enabled) => set({ metronomeEnabled: enabled }),
   setPracticeSubTab: (tab) => set({ practiceSubTab: tab }),
-  setActivePhrasePractice: (value) => set({ activePhrasePractice: value }),
+  setActivePhrasePractice: (value) =>
+    set({
+      activePhrasePractice: value,
+      pendingAttemptId: value === null ? null : get().pendingAttemptId,
+    }),
+  beginResultEntry: (newId) => {
+    const current = get().pendingAttemptId;
+    if (current) return current;
+    set({ pendingAttemptId: newId });
+    return newId;
+  },
+  setPlayerError: (code) => set({ playerError: code }),
 
   getPracticeMinutes: () => {
     const { practiceStartTime, elapsedSeconds } = get();

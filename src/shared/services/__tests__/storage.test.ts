@@ -13,6 +13,10 @@ import {
   savePracticePhrase,
 } from "../storage";
 import type { PhraseAttempt, PracticePhrase } from "@/shared/types/models";
+import {
+  computeTodayTargetBpm,
+  getLatestAttempt,
+} from "@/features/practice/lib/progression";
 
 jest.mock("@react-native-async-storage/async-storage", () => mockAsyncStorage);
 
@@ -70,7 +74,7 @@ describe("readList（要素単位の検証）", () => {
     expect(phrases.map((p) => p.id)).toEqual(["a", "b"]);
   });
 
-  it("壊れた要素を捨てた後に保存しても正常な要素は失われない", async () => {
+  it("壊れた要素を捨てた後に保存しても正常な要素は失われず、捨てた要素は退避される", async () => {
     await AsyncStorage.setItem(
       STORAGE_KEYS.PRACTICE_PHRASES,
       JSON.stringify([makePhrase("a"), { id: "broken" }]),
@@ -80,6 +84,12 @@ describe("readList（要素単位の検証）", () => {
 
     const phrases = await getPracticePhrases();
     expect(phrases.map((p) => p.id)).toEqual(["c", "a"]);
+    const keys = await AsyncStorage.getAllKeys();
+    const droppedKey = keys.find((k) => k.includes("__dropped_"));
+    expect(droppedKey).toBeDefined();
+    expect(JSON.parse((await AsyncStorage.getItem(droppedKey!)) ?? "[]")).toEqual([
+      { id: "broken" },
+    ]);
   });
 
   it("JSONが破損していれば退避キーへ保存して空配列を返す", async () => {
@@ -173,6 +183,34 @@ describe("recordPhraseResult", () => {
     expect((await getPracticePhrases())[0].currentBpm).toBe(80);
   });
 
+  it("削除済みフレーズへの記録は例外にし、孤児の結果を残さない", async () => {
+    await expect(
+      recordPhraseResult({ ...makeAttempt("a1", "missing"), bpm: 90, result: "ok" }),
+    ).rejects.toThrow();
+
+    expect(await getPhraseAttempts()).toHaveLength(0);
+  });
+
+  it("記録と翌日の目標BPM算出が端から端まで繋がる", async () => {
+    await savePracticePhrase({ ...makePhrase("p"), currentBpm: 80, targetBpm: 90 });
+
+    await recordPhraseResult({ ...makeAttempt("a1", "p"), date: "2026-09-01T00:00:00.000Z", bpm: 80, result: "ok" });
+    let [phrase] = await getPracticePhrases();
+    let latest = getLatestAttempt((await getPhraseAttempts()).filter((a) => a.phraseId === "p"));
+    expect(computeTodayTargetBpm(phrase.currentBpm, latest, phrase.targetBpm)).toBe(85);
+
+    await recordPhraseResult({ ...makeAttempt("a2", "p"), date: "2026-09-02T00:00:00.000Z", bpm: 85, result: "ok" });
+    [phrase] = await getPracticePhrases();
+    latest = getLatestAttempt((await getPhraseAttempts()).filter((a) => a.phraseId === "p"));
+    expect(phrase.currentBpm).toBe(85);
+    expect(computeTodayTargetBpm(phrase.currentBpm, latest, phrase.targetBpm)).toBe(90);
+
+    await recordPhraseResult({ ...makeAttempt("a3", "p"), date: "2026-09-03T00:00:00.000Z", bpm: 90, result: "ok" });
+    [phrase] = await getPracticePhrases();
+    latest = getLatestAttempt((await getPhraseAttempts()).filter((a) => a.phraseId === "p"));
+    expect(computeTodayTargetBpm(phrase.currentBpm, latest, phrase.targetBpm)).toBe(90);
+  });
+
   it("あやしい・弾けなかった結果では到達BPMを変えない", async () => {
     await savePracticePhrase(makePhrase("p"));
 
@@ -188,14 +226,54 @@ describe("migrateIfNeeded", () => {
     await AsyncStorage.clear();
   });
 
-  it("未設定ならschema_versionに1を書く", async () => {
+  it("未設定ならschema_versionに現行バージョンを書く", async () => {
     await migrateIfNeeded();
 
-    expect(await AsyncStorage.getItem(STORAGE_KEYS.SCHEMA_VERSION)).toBe("1");
+    expect(await AsyncStorage.getItem(STORAGE_KEYS.SCHEMA_VERSION)).toBe("2");
+  });
+
+  it("旧ビルドが検証せずに保存した値を新スキーマに収まる形へ補正し、データを失わない", async () => {
+    await AsyncStorage.setItem(
+      STORAGE_KEYS.PRACTICE_PHRASES,
+      JSON.stringify([
+        { ...makePhrase("fast"), currentBpm: 300, targetBpm: 320.7 },
+        { ...makePhrase("slow"), currentBpm: 30 },
+        { ...makePhrase("flat"), startSec: 20, endSec: 20 },
+        { ...makePhrase("rev"), startSec: 30, endSec: 20 },
+      ]),
+    );
+    await AsyncStorage.setItem(
+      STORAGE_KEYS.PHRASE_ATTEMPTS,
+      JSON.stringify([{ ...makeAttempt("a1", "slow"), bpm: 35 }]),
+    );
+
+    await migrateIfNeeded();
+
+    const phrases = await getPracticePhrases();
+    expect(phrases.map((p) => p.id)).toEqual(["fast", "slow", "flat", "rev"]);
+    expect(phrases[0]).toMatchObject({ currentBpm: 240, targetBpm: 240 });
+    expect(phrases[1].currentBpm).toBe(40);
+    expect(phrases[2]).toMatchObject({ startSec: 20, endSec: 21 });
+    expect(phrases[3]).toMatchObject({ startSec: 30, endSec: 31 });
+    expect((await getPhraseAttempts())[0].bpm).toBe(40);
+    expect(await corruptKeys()).toHaveLength(0);
+  });
+
+  it("バージョン1からも補正を適用する", async () => {
+    await AsyncStorage.setItem(STORAGE_KEYS.SCHEMA_VERSION, "1");
+    await AsyncStorage.setItem(
+      STORAGE_KEYS.PRACTICE_PHRASES,
+      JSON.stringify([{ ...makePhrase("x"), currentBpm: 999 }]),
+    );
+
+    await migrateIfNeeded();
+
+    expect((await getPracticePhrases())[0].currentBpm).toBe(240);
+    expect(await AsyncStorage.getItem(STORAGE_KEYS.SCHEMA_VERSION)).toBe("2");
   });
 
   it("既に現行バージョンなら何もしない", async () => {
-    await AsyncStorage.setItem(STORAGE_KEYS.SCHEMA_VERSION, "1");
+    await AsyncStorage.setItem(STORAGE_KEYS.SCHEMA_VERSION, "2");
     const setItem = jest.spyOn(AsyncStorage, "setItem");
     setItem.mockClear();
 

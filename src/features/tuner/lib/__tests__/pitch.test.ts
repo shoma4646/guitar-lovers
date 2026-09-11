@@ -78,10 +78,16 @@ describe("nearestStringInPreset", () => {
     expect(Math.abs(result.cents)).toBeLessThan(1);
   });
 
-  it("2弦と1弦の中間は近い方を返す", () => {
+  it("2弦Bの半音上（C4）は2弦を返し、セント差は+100になる", () => {
     const b3 = noteToFrequency("B3");
     const result = nearestStringInPreset(b3 * Math.pow(2, 1 / 12), standard);
     expect(result.index).toBe(4);
     expect(result.cents).toBeCloseTo(100, 3);
+  });
+
+  it("2弦と1弦のちょうど中間（D4）は近い方の1弦を返す", () => {
+    const result = nearestStringInPreset(noteToFrequency("D4"), standard);
+    expect(result.index).toBe(5);
+    expect(result.cents).toBeCloseTo(-200, 3);
   });
 });

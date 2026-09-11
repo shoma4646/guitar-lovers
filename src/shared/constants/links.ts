@@ -18,12 +18,6 @@ export const PRIVACY_POLICY_URL =
 export const SUPPORT_URL =
   "https://shoma4646.github.io/guitar_lovers/support.html";
 
-/**
- * 問い合わせ先メールアドレス。
- * 公開前に実際の連絡先メールアドレスへ差し替える。
- */
-export const CONTACT_EMAIL = "REPLACE_WITH_CONTACT_EMAIL";
-
 /** YouTube利用規約 */
 export const YOUTUBE_TERMS_URL = "https://www.youtube.com/t/terms";
 

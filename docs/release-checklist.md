@@ -14,7 +14,7 @@ Guitar Loversをストア公開するための作業一覧。上から順に進�
 - [ ] `docs/privacy-policy.md` をHTML化し、gh-pagesブランチの`privacy.html`として配置する
 - [ ] `docs/support.md` をHTML化し、gh-pagesブランチの`support.html`として配置する
 - [ ] `src/shared/constants/links.ts` の `PRIVACY_POLICY_URL` / `SUPPORT_URL` が実際に公開されたURLと一致しているか確認する
-- [ ] `src/shared/constants/links.ts` の `CONTACT_EMAIL`、`docs/privacy-policy.md` / `docs/support.md` 内の `REPLACE_WITH_CONTACT_EMAIL` を実際の問い合わせ先メールアドレスへ差し替える
+- [ ] `docs/privacy-policy.md` / `docs/support.md` 内の `REPLACE_WITH_CONTACT_EMAIL` を実際の問い合わせ先メールアドレスへ差し替える（アプリ内の問い合わせ導線はサポートページ経由）
 
 ## (c) EAS
 

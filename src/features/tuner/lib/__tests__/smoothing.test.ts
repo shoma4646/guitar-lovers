@@ -41,6 +41,17 @@ describe("createPitchSmoother", () => {
     expect(smoother.push(220, 1)).toBe(220);
   });
 
+  it("既定値では信頼度0.9未満と60〜1200Hz外を捨て、3回連続で無音に戻る", () => {
+    const smoother = createPitchSmoother();
+    expect(smoother.push(110, 0.89)).toBeNull();
+    expect(smoother.push(59, 1)).toBeNull();
+    expect(smoother.push(1201, 1)).toBeNull();
+    expect(smoother.push(110, 0.9)).toBe(110);
+    smoother.push(0, 0);
+    smoother.push(0, 0);
+    expect(smoother.push(0, 0)).toBeNull();
+  });
+
   it("resetで窓が空になる", () => {
     const smoother = createPitchSmoother();
     smoother.push(110, 1);

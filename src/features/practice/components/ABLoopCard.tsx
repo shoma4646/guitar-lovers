@@ -20,7 +20,7 @@ import {
 import { Icon } from "@/shared/components/atoms/Icon";
 import { colors } from "@/shared/theme";
 import { formatDuration } from "@/features/practice/lib/formatters";
-import { BPM_MAX, BPM_MIN, isValidBpm } from "@/shared/constants/bpm";
+import { BPM_MAX, BPM_MIN, clampBpm, isValidBpm } from "@/shared/constants/bpm";
 import type { ABLoop } from "@/shared/types/models";
 import { cardShadowStyle, cardStyle } from "./cardStyle";
 
@@ -55,7 +55,7 @@ export function ABLoopCard({
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [name, setName] = useState("");
   const [currentBpm, setCurrentBpm] = useState(String(defaultBpm));
-  const [targetBpm, setTargetBpm] = useState(String(defaultBpm + 20));
+  const [targetBpm, setTargetBpm] = useState(String(clampBpm(defaultBpm + 20)));
 
   const canSavePhrase =
     abLoop.pointA !== null &&
@@ -65,7 +65,7 @@ export function ABLoopCard({
   const openSaveModal = useCallback(() => {
     setName("");
     setCurrentBpm(String(defaultBpm));
-    setTargetBpm(String(defaultBpm + 20));
+    setTargetBpm(String(clampBpm(defaultBpm + 20)));
     setShowSaveModal(true);
   }, [defaultBpm]);
 

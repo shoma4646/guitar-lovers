@@ -2,6 +2,8 @@
  * アプリ全体で使用するデータモデルの型定義
  */
 
+import type { PlaybackRate } from "@/shared/constants/playback";
+
 /** 練習セッションの記録 */
 export interface PracticeSession {
   /** 一意のID */
@@ -61,12 +63,12 @@ export interface PracticePhrase {
   /** 目標BPM */
   targetBpm: number;
   /** 区間再生時の再生速度 */
-  playbackRate: number;
+  playbackRate: PlaybackRate;
   /** 作成日時（ISO 8601形式） */
   createdAt: string;
   /** 更新日時（ISO 8601形式） */
   updatedAt: string;
-  /** アーカイブ日時（ISO 8601形式、任意）。設定されていれば今日の練習メニューに出さない */
+  /** アーカイブ日時（ISO 8601形式、任意）。設定されていれば今日の練習メニューと進捗一覧に表示しない（記録は保持） */
   archivedAt?: string;
 }
 
@@ -130,7 +132,7 @@ export interface PracticeStats {
   totalDuration: number;
   /** 総練習回数 */
   totalSessions: number;
-  /** 曜日別練習時間（日〜土、秒） */
+  /** 曜日別練習時間（月〜日、秒） */
   weeklyData: number[];
 }
 
@@ -140,18 +142,4 @@ export interface MetronomeConfig {
   bpm: number;
   /** 有効かどうか */
   enabled: boolean;
-}
-
-/** チューナーの状態 */
-export interface TunerState {
-  /** 検出中かどうか */
-  isActive: boolean;
-  /** 現在のノート名 */
-  currentNote: string | null;
-  /** セント値（-50〜+50） */
-  cents: number;
-  /** 現在フォーカスしている弦のインデックス（0=6弦） */
-  focusedString: number;
-  /** 各弦のチューニング完了状態 */
-  tunedStrings: boolean[];
 }

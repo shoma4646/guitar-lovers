@@ -4,9 +4,6 @@ import { BPM_MAX } from "@/shared/constants/bpm";
 /** 1回の成功で引き上げる目標BPMの幅 */
 const BPM_STEP = 5;
 
-/** 今日の目標BPMの上限。現実的な演奏速度を超えないための頭打ち値 */
-const MAX_BPM = BPM_MAX;
-
 /**
  * 練習結果一覧から最新の1件を返す（dateで降順比較）
  * @param attempts - 対象フレーズの練習結果一覧
@@ -23,9 +20,9 @@ export function getLatestAttempt(
 /**
  * 今日の目標BPMを計算する
  *
- * 直近の結果が「弾けた（ok）」なら現在BPMから+5するが、フレーズの目標BPMと
- * 上限240 BPMのいずれか低い方で頭打ちにする。
- * 「あやしい（partial）」「弾けなかった（ng）」または記録が無い場合は現在BPMを据え置く。
+ * 直近の結果が到達BPM以上のテンポで「弾けた（ok）」なら到達BPMから+5。
+ * それ以外（あやしい・弾けなかった・到達BPMより遅いテンポでの成功・記録なし）は据え置く。
+ * 上限はフレーズの目標BPM（既に超えていれば到達BPM）とメトロノーム上限のいずれか低い方。
  * @param currentBpm - フレーズの現在の到達BPM
  * @param latestAttempt - 直近の練習結果（無ければundefined）
  * @param targetBpm - フレーズの目標BPM
@@ -35,8 +32,10 @@ export function computeTodayTargetBpm(
   latestAttempt: PhraseAttempt | undefined,
   targetBpm: number,
 ): number {
-  if (latestAttempt?.result === "ok") {
-    return Math.min(currentBpm + BPM_STEP, Math.max(targetBpm, currentBpm), MAX_BPM);
+  const clearedAtCurrentTempo =
+    latestAttempt?.result === "ok" && latestAttempt.bpm >= currentBpm;
+  if (!clearedAtCurrentTempo) {
+    return currentBpm;
   }
-  return currentBpm;
+  return Math.min(currentBpm + BPM_STEP, Math.max(targetBpm, currentBpm), BPM_MAX);
 }
