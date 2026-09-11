@@ -6,9 +6,10 @@
  * - 中央 大型カード: 周波数 / ノート（display-numeric 120px）/ 半円ゲージ
  * - 6 弦セレクター（小さな円形）
  * - Standard / Auto の Quick Controls
- * - 画面下部に開始/停止 CTA（デモモード起動）
+ * - 画面下部に開始/停止 CTA
  *
- * 実際のピッチ検出にはネイティブビルドが必要なため、デモモードで各弦を順番にシミュレートする。
+ * マイク入力からのピッチ検出は usePitchDetector が担い、この画面は検出周波数を
+ * 最寄りの弦・セント差・針の角度へ変換して描画する。
  */
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
@@ -18,28 +19,31 @@ import {
   Pressable,
   ScrollView,
   Animated,
-  Alert,
+  Linking,
   StyleSheet,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Icon } from "@/shared/components/atoms/Icon";
-import { colors, textStyles } from "@/shared/theme";
+import { colors } from "@/shared/theme";
 import {
   tuningPresets,
   TuningPresetKey,
   TUNING_THRESHOLD_CENTS,
-  guitarStringFrequencies,
 } from "@/shared/constants/tuning";
 import { ErrorBoundary } from "@/shared/components/molecules/ErrorBoundary";
-
-/** デモモードで1弦あたり表示するミリ秒 */
-const DEMO_INTERVAL_MS = 2000;
-
-/** デモ用セント値のシーケンス（-30 → 0 → +20 → 0） */
-const DEMO_CENTS_SEQUENCE = [-28, -15, -5, 2, 0, 0, 18, 5, 0, 0];
+import { usePitchDetector } from "@/features/tuner/hooks/usePitchDetector";
+import {
+  nearestStringInPreset,
+  noteToFrequency,
+} from "@/features/tuner/lib/pitch";
 
 /** 各弦の表示番号（6弦〜1弦） */
 const STRING_NUMBERS = [6, 5, 4, 3, 2, 1];
+
+/** 許容範囲内がこの時間続いたら弦をチューニング済みにする */
+const TUNED_HOLD_MS = 500;
+
+const UNTUNED_STRINGS = [false, false, false, false, false, false];
 
 /** セント値をメーター表示用の割合に変換する（-50〜+50 → 0〜1） */
 function centsToMeterRatio(cents: number): number {
@@ -62,138 +66,113 @@ function formatCents(cents: number): string {
 export function TunerScreen() {
   const [selectedPreset, setSelectedPreset] =
     useState<TuningPresetKey>("standard");
-  const [isActive, setIsActive] = useState(false);
   const [focusedStringIndex, setFocusedStringIndex] = useState(0);
-  const [currentNote, setCurrentNote] = useState<string | null>(null);
   const [cents, setCents] = useState(0);
-  const [tunedStrings, setTunedStrings] = useState<boolean[]>([
-    false, false, false, false, false, false,
-  ]);
+  const [tunedStrings, setTunedStrings] = useState<boolean[]>(UNTUNED_STRINGS);
 
-  const demoSeqIndexRef = useRef(0);
-  const demoTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const { status, hz, start, stop } = usePitchDetector();
+  const isActive = status === "listening";
+
+  const inTuneSinceRef = useRef<number | null>(null);
   const noteOpacity = useRef(new Animated.Value(1)).current;
+  const lastNoteRef = useRef<string | null>(null);
 
   const preset = tuningPresets[selectedPreset];
 
-  const animateNoteChange = useCallback(
-    (newNote: string) => {
-      Animated.sequence([
-        Animated.timing(noteOpacity, {
-          toValue: 0,
-          duration: 100,
-          useNativeDriver: true,
-        }),
-        Animated.timing(noteOpacity, {
-          toValue: 1,
-          duration: 200,
-          useNativeDriver: true,
-        }),
-      ]).start();
-      setCurrentNote(newNote);
-    },
-    [noteOpacity],
-  );
+  const animateNoteChange = useCallback(() => {
+    Animated.sequence([
+      Animated.timing(noteOpacity, {
+        toValue: 0,
+        duration: 100,
+        useNativeDriver: true,
+      }),
+      Animated.timing(noteOpacity, {
+        toValue: 1,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [noteOpacity]);
 
-  const demoTick = useCallback(() => {
-    setFocusedStringIndex((prevStringIdx) => {
-      const seqIdx = demoSeqIndexRef.current;
-      const centsVal = DEMO_CENTS_SEQUENCE[seqIdx];
-      const note = preset.notes[prevStringIdx];
+  // 検出周波数を最寄りの弦とセント差へ変換し、許容範囲内が続いた弦をチューニング済みにする
+  useEffect(() => {
+    if (hz === null) {
+      inTuneSinceRef.current = null;
+      return;
+    }
+    const nearest = nearestStringInPreset(hz, preset.notes);
+    setFocusedStringIndex(nearest.index);
+    setCents(nearest.cents);
 
-      setCents(centsVal);
-      animateNoteChange(note);
+    const note = preset.notes[nearest.index];
+    if (lastNoteRef.current !== note) {
+      lastNoteRef.current = note;
+      animateNoteChange();
+    }
 
-      demoSeqIndexRef.current = (seqIdx + 1) % DEMO_CENTS_SEQUENCE.length;
-
-      if (demoSeqIndexRef.current === 0) {
+    if (Math.abs(nearest.cents) <= TUNING_THRESHOLD_CENTS) {
+      const now = Date.now();
+      if (inTuneSinceRef.current === null) {
+        inTuneSinceRef.current = now;
+      } else if (now - inTuneSinceRef.current >= TUNED_HOLD_MS) {
         setTunedStrings((prev) => {
+          if (prev[nearest.index]) return prev;
           const next = [...prev];
-          next[prevStringIdx] = true;
+          next[nearest.index] = true;
           return next;
         });
-        return (prevStringIdx + 1) % 6;
       }
-      return prevStringIdx;
-    });
-  }, [preset, animateNoteChange]);
+    } else {
+      inTuneSinceRef.current = null;
+    }
+  }, [hz, preset, animateNoteChange]);
 
   const handleToggleActive = useCallback(() => {
     if (isActive) {
-      if (demoTimerRef.current) {
-        clearInterval(demoTimerRef.current);
-        demoTimerRef.current = null;
-      }
-      setIsActive(false);
-      setCurrentNote(null);
+      void stop();
       setCents(0);
       return;
     }
-    Alert.alert(
-      "デモモードで起動",
-      "マイクからのピッチ検出にはネイティブビルドが必要です。\nデモモードで各弦のチューニングをシミュレートします。",
-      [
-        { text: "キャンセル", style: "cancel" },
-        {
-          text: "デモ開始",
-          onPress: () => {
-            setIsActive(true);
-            demoSeqIndexRef.current = 0;
-            setTunedStrings([false, false, false, false, false, false]);
-            setFocusedStringIndex(0);
-            demoTimerRef.current = setInterval(
-              demoTick,
-              DEMO_INTERVAL_MS / DEMO_CENTS_SEQUENCE.length,
-            );
-          },
-        },
-      ],
-    );
-  }, [isActive, demoTick]);
+    setTunedStrings(UNTUNED_STRINGS);
+    inTuneSinceRef.current = null;
+    void start();
+  }, [isActive, start, stop]);
 
   const handleSelectPreset = useCallback(
     (key: TuningPresetKey) => {
       if (isActive) {
-        if (demoTimerRef.current) {
-          clearInterval(demoTimerRef.current);
-          demoTimerRef.current = null;
-        }
-        setIsActive(false);
-        setCurrentNote(null);
-        setCents(0);
+        void stop();
       }
       setSelectedPreset(key);
-      setTunedStrings([false, false, false, false, false, false]);
+      setTunedStrings(UNTUNED_STRINGS);
       setFocusedStringIndex(0);
+      setCents(0);
+      lastNoteRef.current = null;
     },
-    [isActive],
+    [isActive, stop],
   );
 
-  useEffect(() => {
-    return () => {
-      if (demoTimerRef.current) {
-        clearInterval(demoTimerRef.current);
-      }
-    };
-  }, []);
-
-  useEffect(() => {
-    if (isActive && demoTimerRef.current) {
-      clearInterval(demoTimerRef.current);
-      demoTimerRef.current = setInterval(
-        demoTick,
-        DEMO_INTERVAL_MS / DEMO_CENTS_SEQUENCE.length,
-      );
-    }
-  }, [demoTick, isActive]);
-
-  const meterRatio = centsToMeterRatio(cents);
+  const meterRatio = centsToMeterRatio(isActive ? cents : 0);
   const meterColor = getMeterColor(cents);
-  const isTuned = Math.abs(cents) <= TUNING_THRESHOLD_CENTS && isActive;
-  const displayNote = currentNote ?? preset.notes[focusedStringIndex] ?? "E";
+  const isTuned = isActive && hz !== null && Math.abs(cents) <= TUNING_THRESHOLD_CENTS;
+  const displayNote = preset.notes[focusedStringIndex] ?? "E2";
+  const displayHz = hz ?? noteToFrequency(displayNote);
 
   // -50..+50 cents → -45deg..+45deg の針回転
   const needleAngleDeg = (meterRatio - 0.5) * 90;
+
+  const ctaLabel =
+    status === "requesting" ? "開始中..." : isActive ? "停止" : "開始";
+  const helperText =
+    status === "denied"
+      ? "マイクの許可が必要です。設定アプリから許可してください。"
+      : status === "error"
+        ? "マイクを開始できませんでした。他のアプリがマイクを使用していないか確認してください。"
+        : isActive
+          ? hz === null
+            ? "弦を1本ずつ鳴らしてください"
+            : "音を伸ばしたまま針が中央に来るよう調整してください"
+          : "開始してから弦を鳴らすと、最も近い弦を自動で判定します";
 
   return (
     <ErrorBoundary>
@@ -231,7 +210,7 @@ export function TunerScreen() {
             >
               {/* Frequency Display */}
               <Text className="text-on-surface-variant text-[14px] font-medium" style={styles.hzText}>
-                {guitarStringFrequencies[focusedStringIndex]?.toFixed(1) ?? "440.0"} Hz
+                {displayHz.toFixed(1)} Hz
               </Text>
 
               {/* Central Note */}
@@ -239,7 +218,10 @@ export function TunerScreen() {
                 <Animated.Text
                   style={[
                     styles.noteText,
-                    { color: isTuned ? colors.success : colors.primary, opacity: noteOpacity },
+                    {
+                      color: isTuned ? colors.success : colors.primary,
+                      opacity: isActive && hz === null ? 0.35 : noteOpacity,
+                    },
                   ]}
                   accessibilityLiveRegion="polite"
                 >
@@ -277,7 +259,7 @@ export function TunerScreen() {
                 style={{ color: meterColor, fontVariant: ["tabular-nums"] }}
                 accessibilityLiveRegion="polite"
               >
-                {isActive ? formatCents(cents) : "-- cents"}
+                {isActive && hz !== null ? formatCents(cents) : "-- cents"}
               </Text>
 
               {/* Decoration glows */}
@@ -288,7 +270,7 @@ export function TunerScreen() {
             {/* String Selectors */}
             <View className="w-full mt-xl flex-row" style={{ gap: 12 }}>
               {preset.notes.map((note, idx) => {
-                const isFocused = isActive && idx === focusedStringIndex;
+                const isFocused = isActive && hz !== null && idx === focusedStringIndex;
                 const isTunedString = tunedStrings[idx];
                 const stringNum = STRING_NUMBERS[idx];
                 const displayLabel = idx === 0 ? note.toLowerCase() : note;
@@ -338,7 +320,7 @@ export function TunerScreen() {
               })}
             </View>
 
-            {/* Quick Controls (Preset chips + start) */}
+            {/* Quick Controls (Preset chips) */}
             <View className="mt-xl flex-row flex-wrap justify-center" style={{ gap: 12 }}>
               {(Object.keys(tuningPresets) as TuningPresetKey[]).map((key) => {
                 const active = key === selectedPreset;
@@ -381,11 +363,13 @@ export function TunerScreen() {
             {/* Start / Stop CTA */}
             <Pressable
               onPress={handleToggleActive}
+              disabled={status === "requesting"}
               className="w-full mt-xl items-center justify-center active:opacity-90"
               style={{
                 height: 52,
                 borderRadius: 16,
                 backgroundColor: isActive ? colors.error : colors.primary,
+                opacity: status === "requesting" ? 0.7 : 1,
               }}
               accessibilityRole="button"
               accessibilityLabel={isActive ? "チューナーを停止" : "チューナーを開始"}
@@ -394,13 +378,37 @@ export function TunerScreen() {
                 className="text-body-lg"
                 style={{ color: colors.onPrimary, fontWeight: "700", letterSpacing: 0.5 }}
               >
-                {isActive ? "停止" : "デモを開始"}
+                {ctaLabel}
               </Text>
             </Pressable>
 
-            <Text className="text-on-surface-variant text-label-sm text-center mt-sm" style={{ lineHeight: 18 }}>
-              マイクからのピッチ検出にはネイティブビルドが必要です
+            <Text
+              className="text-on-surface-variant text-label-sm text-center mt-sm"
+              style={{ lineHeight: 18 }}
+            >
+              {helperText}
             </Text>
+
+            {status === "denied" && (
+              <Pressable
+                onPress={() => void Linking.openSettings()}
+                className="mt-sm active:opacity-80"
+                style={{
+                  paddingHorizontal: 20,
+                  paddingVertical: 10,
+                  borderRadius: 9999,
+                  backgroundColor: colors.surfaceContainer,
+                }}
+                accessibilityRole="button"
+              >
+                <Text
+                  className="text-label-sm"
+                  style={{ color: colors.primary, fontWeight: "600" }}
+                >
+                  設定を開く
+                </Text>
+              </Pressable>
+            )}
           </View>
         </ScrollView>
       </SafeAreaView>
@@ -445,7 +453,7 @@ const styles = StyleSheet.create({
     height: 256,
     bottom: -128,
     borderWidth: 12,
-    borderColor: "#fce3df", // surface-container-high
+    borderColor: colors.surfaceContainerHigh,
     borderRadius: 128,
   },
   gaugeRingActive: {
@@ -456,7 +464,7 @@ const styles = StyleSheet.create({
     left: "50%",
     marginLeft: -30,
     borderTopWidth: 12,
-    borderColor: "#ff6b5b", // primary-container
+    borderColor: colors.primaryContainer,
   },
   needleContainer: {
     position: "absolute",
@@ -498,6 +506,3 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,175,143,0.05)",
   },
 });
-
-// textStylesをimportしているが直接使っていないので参照を残す
-void textStyles;
