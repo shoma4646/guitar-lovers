@@ -311,16 +311,35 @@ export async function getPhraseAttempts(): Promise<PhraseAttempt[]> {
 }
 
 /**
- * フレーズ練習結果を保存する
+ * フレーズ練習結果を保存する。同じIDが既にあれば置き換える（再送しても重複しない）
  * @param attempt - 保存する練習結果
  */
 export async function savePhraseAttempt(
   attempt: PhraseAttempt
 ): Promise<void> {
   const attempts = await getPhraseAttempts();
-  attempts.unshift(attempt);
+  const others = attempts.filter((a) => a.id !== attempt.id);
+  others.unshift(attempt);
   await AsyncStorage.setItem(
     STORAGE_KEYS.PHRASE_ATTEMPTS,
-    JSON.stringify(attempts)
+    JSON.stringify(others)
   );
+}
+
+/**
+ * フレーズ練習の結果を記録し、弾けた場合はフレーズの到達BPMを引き上げる
+ * attemptのIDをキーにした置き換え保存なので、途中で失敗しても同じ入力で再実行できる
+ * @param attempt - 記録する練習結果
+ */
+export async function recordPhraseResult(attempt: PhraseAttempt): Promise<void> {
+  await savePhraseAttempt(attempt);
+  if (attempt.result !== "ok") return;
+
+  const phrases = await getPracticePhrases();
+  const phrase = phrases.find((p) => p.id === attempt.phraseId);
+  if (!phrase || phrase.currentBpm >= attempt.bpm) return;
+  await updatePracticePhrase(phrase.id, {
+    currentBpm: attempt.bpm,
+    updatedAt: attempt.date,
+  });
 }

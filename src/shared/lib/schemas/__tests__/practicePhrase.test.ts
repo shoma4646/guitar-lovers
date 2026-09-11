@@ -35,6 +35,21 @@ describe("practicePhrasesSchema", () => {
     expect(result.success).toBe(false);
   });
 
+  it("BPMがメトロノームの上限240を超えるときは失敗する", () => {
+    const data = [makePhrase({ targetBpm: 300 })];
+    const result = practicePhrasesSchema.safeParse(data);
+    expect(result.success).toBe(false);
+  });
+
+  it("endSecがstartSec以下のときは失敗する", () => {
+    expect(
+      practicePhrasesSchema.safeParse([makePhrase({ startSec: 20, endSec: 20 })]).success,
+    ).toBe(false);
+    expect(
+      practicePhrasesSchema.safeParse([makePhrase({ startSec: 30, endSec: 20 })]).success,
+    ).toBe(false);
+  });
+
   it("startSecが負の値のときは失敗する", () => {
     const data = [makePhrase({ startSec: -1 })];
     const result = practicePhrasesSchema.safeParse(data);

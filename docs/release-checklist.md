@@ -37,8 +37,9 @@ Guitar Loversをストア公開するための作業一覧。上から順に進�
 ### 日本語
 
 ```
-本アプリはYouTube公式のIFrame Player APIのみを使用し、seekTo（区間再生）と
-setPlaybackRate（再生速度変更）のみを呼び出しています。動画のダウンロードや
+本アプリはYouTube公式のIFrame Player APIのみを使用し、公開された再生制御メソッド
+（playVideo / pauseVideo / seekTo による区間再生、setPlaybackRate による再生速度変更、
+getCurrentTime / getDuration による再生位置の取得）だけを呼び出しています。動画のダウンロードや
 バックグラウンド再生は行わず、プレイヤーの標準コントロール・ブランディングも
 改変していません。
 
@@ -51,8 +52,10 @@ setPlaybackRate（再生速度変更）のみを呼び出しています。動�
 ### English
 
 ```
-This app uses only the official YouTube IFrame Player API, calling exclusively
-seekTo (for A/B loop playback) and setPlaybackRate (for playback speed control).
+This app uses only the official YouTube IFrame Player API and calls only its
+documented playback methods: playVideo, pauseVideo, seekTo (for A/B loop
+playback), setPlaybackRate (for playback speed control), and getCurrentTime /
+getDuration (to read the playback position).
 It does not download videos or play audio in the background, and it does not
 modify the player's standard controls or branding.
 

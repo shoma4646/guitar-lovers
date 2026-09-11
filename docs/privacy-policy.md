@@ -18,7 +18,7 @@ Guitar Lovers（以下「本アプリ」）は、YouTubeの動画を使ったギ
 - 埋め込みプレイヤーの表示・再生に伴い、YouTube/Googleが Cookie 等を通じてデバイスレベルの情報（視聴状況、デバイス情報等）を取得する場合があります。これはYouTube/Googleによる収集であり、本アプリが収集・保存するものではありません
 - YouTube/Googleによるデータの取り扱いについては、[Googleプライバシーポリシー](http://www.google.com/policies/privacy)をご確認ください
 
-本アプリは、YouTube公式のIFrame Player APIが提供する`seekTo`（区間再生）と`setPlaybackRate`（再生速度変更）のみを使用しており、動画のダウンロードや標準コントロール・ブランディングの改変は行いません。
+本アプリは、YouTube公式のIFrame Player APIが公開している再生制御メソッド（`playVideo`、`pauseVideo`、`seekTo`による区間再生、`setPlaybackRate`による再生速度変更、`getCurrentTime`と`getDuration`による再生位置の取得）のみを使用しており、動画のダウンロードや標準コントロール・ブランディングの改変は行いません。
 
 ## マイクの利用
 

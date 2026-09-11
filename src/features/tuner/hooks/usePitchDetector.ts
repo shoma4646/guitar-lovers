@@ -56,7 +56,8 @@ export function usePitchDetector(): PitchDetectorState {
   const smootherRef = useRef(createPitchSmoother());
   const lastUiUpdateRef = useRef(0);
 
-  const stop = useCallback(async () => {
+  /** 録音リソースを解放し、再度startできる状態に戻す */
+  const releaseRecorder = useCallback(async () => {
     const recorder = recorderRef.current;
     recorderRef.current = null;
     if (recorder) {
@@ -71,8 +72,12 @@ export function usePitchDetector(): PitchDetectorState {
     restorePlaybackSession();
     setHz(null);
     setClarity(0);
-    setStatus("idle");
   }, []);
+
+  const stop = useCallback(async () => {
+    await releaseRecorder();
+    setStatus("idle");
+  }, [releaseRecorder]);
 
   const start = useCallback(async () => {
     if (recorderRef.current) return;
@@ -93,7 +98,7 @@ export function usePitchDetector(): PitchDetectorState {
     const recorder = new AudioRecorder();
     recorder.onError((error) => {
       console.error("[tuner] 録音エラー", error);
-      setStatus("error");
+      void releaseRecorder().finally(() => setStatus("error"));
     });
     recorder.onAudioReady(
       {
@@ -126,13 +131,12 @@ export function usePitchDetector(): PitchDetectorState {
     const result = await recorder.start();
     if (result.status === "error") {
       console.error("[tuner] 録音を開始できません", result.message);
-      recorderRef.current = null;
-      restorePlaybackSession();
+      await releaseRecorder();
       setStatus("error");
       return;
     }
     setStatus("listening");
-  }, []);
+  }, [releaseRecorder]);
 
   useFocusEffect(
     useCallback(() => {

@@ -17,12 +17,11 @@ import {
 } from "@/stores/practice";
 import { colors } from "@/shared/theme";
 import { Icon } from "@/shared/components/atoms/Icon";
-import type { PracticePhrase } from "@/shared/types/models";
+import type { ABLoop, PracticePhrase } from "@/shared/types/models";
 import { useSavePracticeSession } from "@/features/progress/api/useSavePracticeSession";
 import { useAddRecentVideo } from "@/features/practice/api/useAddRecentVideo";
 import { useSavePracticePhrase } from "@/features/practice/api/useSavePracticePhrase";
-import { useUpdatePracticePhrase } from "@/features/practice/api/useUpdatePracticePhrase";
-import { useSavePhraseAttempt } from "@/features/practice/api/useSavePhraseAttempt";
+import { useRecordPhraseResult } from "@/features/practice/api/useRecordPhraseResult";
 import { useVideoPresets } from "@/features/practice/api/useVideoPresets";
 import { MetronomeWidget } from "./MetronomeWidget";
 import { VideoLoaderCard } from "./VideoLoaderCard";
@@ -34,6 +33,15 @@ import { BookmarksCard } from "./BookmarksCard";
 import { TodayMenuCard } from "./TodayMenuCard";
 import { PhraseResultSheet } from "./PhraseResultSheet";
 import { cardShadowStyle, cardStyle } from "./cardStyle";
+
+/** A点とB点が両方設定され、B点がA点より後にあるか */
+function isValidLoopRange(abLoop: ABLoop): boolean {
+  return (
+    abLoop.pointA !== null &&
+    abLoop.pointB !== null &&
+    abLoop.pointA < abLoop.pointB
+  );
+}
 
 /** YouTube IFrame APIのエラーコードから、ユーザー向けの案内文を返す */
 function describePlayerError(code: number): string {
@@ -68,7 +76,7 @@ export function PracticeTab() {
   const addBookmark = usePracticeStore((s) => s.addBookmark);
   const removeBookmark = usePracticeStore((s) => s.removeBookmark);
   const setPlaybackRate = usePracticeStore((s) => s.setPlaybackRate);
-  const setMetronomeBpm = usePracticeStore((s) => s.setMetronomeBpm);
+  const startPhrasePractice = usePracticeStore((s) => s.startPhrasePractice);
   const startPracticeTimer = usePracticeStore((s) => s.startPracticeTimer);
   const stopPracticeTimer = usePracticeStore((s) => s.stopPracticeTimer);
   const resetPracticeTimer = usePracticeStore((s) => s.resetPracticeTimer);
@@ -83,8 +91,7 @@ export function PracticeTab() {
   const { mutate: addRecent } = useAddRecentVideo();
   const { mutateAsync: saveSession } = useSavePracticeSession();
   const { mutate: savePhrase } = useSavePracticePhrase();
-  const { mutateAsync: updatePhraseAsync } = useUpdatePracticePhrase();
-  const { mutateAsync: saveAttemptAsync } = useSavePhraseAttempt();
+  const { mutateAsync: recordResultAsync } = useRecordPhraseResult();
   const { data: presets = [] } = useVideoPresets();
 
   const [showResultSheet, setShowResultSheet] = useState(false);
@@ -182,6 +189,10 @@ export function PracticeTab() {
       if (!loadedVideoId || abLoop.pointA === null || abLoop.pointB === null) {
         return;
       }
+      if (!isValidLoopRange(abLoop)) {
+        Alert.alert("エラー", "B点はA点より後に設定してください");
+        return;
+      }
       const now = new Date().toISOString();
       savePhrase(
         {
@@ -203,52 +214,44 @@ export function PracticeTab() {
         },
       );
     },
-    [loadedVideoId, videoTitle, abLoop.pointA, abLoop.pointB, playbackRate, savePhrase],
+    [loadedVideoId, videoTitle, abLoop, playbackRate, savePhrase],
   );
 
   const handleStartPhrase = useCallback(
     (phrase: PracticePhrase, todayTargetBpm: number) => {
-      loadVideo(phrase.videoId, phrase.videoTitle, {
-        abLoop: { pointA: phrase.startSec, pointB: phrase.endSec, enabled: true },
-        // フレーズ保存時のPLAYBACK_RATES由来の値なのでPlaybackRateとして扱える
-        playbackRate: phrase.playbackRate as PlaybackRate,
-      });
-      setMetronomeBpm(todayTargetBpm);
-      setActivePractice({ phrase, todayTargetBpm });
+      startPhrasePractice(phrase, todayTargetBpm);
     },
-    [loadVideo, setMetronomeBpm, setActivePractice],
+    [startPhrasePractice],
   );
 
+  // 結果記録のattempt IDはシートを開いた時点で固定し、保存失敗後の再送で重複しないようにする
+  const pendingAttemptIdRef = useRef<string | null>(null);
+
   const handleFinishPractice = useCallback(() => {
+    pendingAttemptIdRef.current = randomUUID();
     setShowResultSheet(true);
   }, []);
 
   const handleSubmitResult = useCallback(
     async ({ bpm, result }: { bpm: number; result: "ok" | "partial" | "ng" }) => {
       if (!activePractice) return;
-      const now = new Date().toISOString();
       try {
-        await saveAttemptAsync({
-          id: randomUUID(),
+        await recordResultAsync({
+          id: pendingAttemptIdRef.current ?? randomUUID(),
           phraseId: activePractice.phrase.id,
-          date: now,
+          date: new Date().toISOString(),
           bpm,
           result,
         });
-        if (result === "ok") {
-          await updatePhraseAsync({
-            id: activePractice.phrase.id,
-            patch: { currentBpm: bpm, updatedAt: now },
-          });
-        }
       } catch {
         // 失敗時はshowMutationErrorがAlertを表示済み。シートと練習状態は保持し再送できるようにする
         return;
       }
+      pendingAttemptIdRef.current = null;
       setShowResultSheet(false);
       setActivePractice(null);
     },
-    [activePractice, saveAttemptAsync, updatePhraseAsync, setActivePractice],
+    [activePractice, recordResultAsync, setActivePractice],
   );
 
   const handleTryPreset = useCallback(() => {
@@ -409,7 +412,13 @@ export function PracticeTab() {
           currentTime={currentTime}
           onSetPointA={() => setABLoop({ pointA: Math.floor(currentTime) })}
           onSetPointB={() => setABLoop({ pointB: Math.floor(currentTime) })}
-          onToggleLoop={() => setABLoop({ enabled: !abLoop.enabled })}
+          onToggleLoop={() => {
+            if (!abLoop.enabled && !isValidLoopRange(abLoop)) {
+              Alert.alert("エラー", "B点はA点より後に設定してください");
+              return;
+            }
+            setABLoop({ enabled: !abLoop.enabled });
+          }}
           onClear={clearABLoop}
           defaultBpm={metronomeBpm}
           onSavePhrase={handleSavePhrase}

@@ -8,6 +8,7 @@ import {
   getPhraseAttempts,
   getPracticePhrases,
   migrateIfNeeded,
+  recordPhraseResult,
   savePhraseAttempt,
   savePracticePhrase,
 } from "../storage";
@@ -135,6 +136,50 @@ describe("フレーズの削除とアーカイブ", () => {
     const [phrase] = await getPracticePhrases();
     expect(phrase.archivedAt).toEqual(expect.any(String));
     expect(Number.isNaN(Date.parse(phrase.archivedAt!))).toBe(false);
+  });
+});
+
+describe("recordPhraseResult", () => {
+  beforeEach(async () => {
+    await AsyncStorage.clear();
+  });
+
+  it("弾けた結果は到達BPMを引き上げる", async () => {
+    await savePracticePhrase(makePhrase("p"));
+
+    await recordPhraseResult({ ...makeAttempt("a1", "p"), bpm: 90, result: "ok" });
+
+    const [phrase] = await getPracticePhrases();
+    expect(phrase.currentBpm).toBe(90);
+    expect(await getPhraseAttempts()).toHaveLength(1);
+  });
+
+  it("同じattempt IDで再実行しても結果は重複しない", async () => {
+    await savePracticePhrase(makePhrase("p"));
+    const attempt = { ...makeAttempt("a1", "p"), bpm: 90, result: "ok" as const };
+
+    await recordPhraseResult(attempt);
+    await recordPhraseResult(attempt);
+
+    expect(await getPhraseAttempts()).toHaveLength(1);
+    expect((await getPracticePhrases())[0].currentBpm).toBe(90);
+  });
+
+  it("到達BPMより低いBPMで弾けても到達BPMは後退しない", async () => {
+    await savePracticePhrase(makePhrase("p"));
+
+    await recordPhraseResult({ ...makeAttempt("a1", "p"), bpm: 70, result: "ok" });
+
+    expect((await getPracticePhrases())[0].currentBpm).toBe(80);
+  });
+
+  it("あやしい・弾けなかった結果では到達BPMを変えない", async () => {
+    await savePracticePhrase(makePhrase("p"));
+
+    await recordPhraseResult({ ...makeAttempt("a1", "p"), bpm: 120, result: "ng" });
+
+    expect((await getPracticePhrases())[0].currentBpm).toBe(80);
+    expect(await getPhraseAttempts()).toHaveLength(1);
   });
 });
 

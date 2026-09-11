@@ -5,6 +5,7 @@
 
 import { create } from "zustand";
 import type { ABLoop, Bookmark, PracticePhrase } from "@/shared/types/models";
+import { clampBpm } from "@/shared/constants/bpm";
 
 /** 練習タブ内のサブタブ */
 export type PracticeSubTab = "practice" | "presets" | "favorites";
@@ -12,6 +13,11 @@ export type PracticeSubTab = "practice" | "presets" | "favorites";
 /** 再生速度の選択肢 */
 export const PLAYBACK_RATES = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0] as const;
 export type PlaybackRate = (typeof PLAYBACK_RATES)[number];
+
+/** 永続化された再生速度を選択肢のいずれかに丸める（選択肢に無い値は等速扱い） */
+function toPlaybackRate(value: number): PlaybackRate {
+  return PLAYBACK_RATES.find((rate) => rate === value) ?? 1.0;
+}
 
 /** プリセットBPMの選択肢 */
 export const PRESET_BPMS = [60, 80, 100, 120, 140, 160] as const;
@@ -90,6 +96,11 @@ interface PracticeState {
     options?: { abLoop?: ABLoop; playbackRate?: PlaybackRate },
   ) => void;
   clearVideo: () => void;
+  /**
+   * 今日の練習メニューからフレーズ練習を開始する
+   * 動画・区間・再生速度・メトロノームBPM・練習中フレーズを一貫して設定する唯一の入口
+   */
+  startPhrasePractice: (phrase: PracticePhrase, todayTargetBpm: number) => void;
   setIsPlaying: (playing: boolean) => void;
   setCurrentTime: (time: number) => void;
   setDuration: (duration: number) => void;
@@ -172,7 +183,20 @@ export const usePracticeStore = create<PracticeState>((set, get) => ({
       videoLoadNonce: state.videoLoadNonce + 1,
       abLoop: options?.abLoop ?? { pointA: null, pointB: null, enabled: false },
       bookmarks: [],
+      // 別の動画に切り替えたら、前のフレーズへ結果が記録されないよう練習中状態を解除する
+      activePhrasePractice: null,
     }));
+  },
+
+  startPhrasePractice: (phrase, todayTargetBpm) => {
+    get().loadVideo(phrase.videoId, phrase.videoTitle, {
+      abLoop: { pointA: phrase.startSec, pointB: phrase.endSec, enabled: true },
+      playbackRate: toPlaybackRate(phrase.playbackRate),
+    });
+    set({
+      activePhrasePractice: { phrase, todayTargetBpm },
+      metronomeBpm: clampBpm(todayTargetBpm),
+    });
   },
 
   clearVideo: () =>
@@ -185,6 +209,7 @@ export const usePracticeStore = create<PracticeState>((set, get) => ({
       videoStartSeconds: 0,
       videoInitialRate: 1.0,
       urlInput: "",
+      activePhrasePractice: null,
     }),
 
   setIsPlaying: (playing) => set({ isPlaying: playing }),
@@ -230,7 +255,7 @@ export const usePracticeStore = create<PracticeState>((set, get) => ({
       bookmarks: state.bookmarks.filter((b) => b.id !== id),
     })),
 
-  setMetronomeBpm: (bpm) => set({ metronomeBpm: Math.max(40, Math.min(240, bpm)) }),
+  setMetronomeBpm: (bpm) => set({ metronomeBpm: clampBpm(bpm) }),
   setMetronomeEnabled: (enabled) => set({ metronomeEnabled: enabled }),
   setPracticeSubTab: (tab) => set({ practiceSubTab: tab }),
   setActivePhrasePractice: (value) => set({ activePhrasePractice: value }),

@@ -1,10 +1,11 @@
 import type { PhraseAttempt } from "@/shared/types/models";
+import { BPM_MAX } from "@/shared/constants/bpm";
 
 /** 1回の成功で引き上げる目標BPMの幅 */
 const BPM_STEP = 5;
 
 /** 今日の目標BPMの上限。現実的な演奏速度を超えないための頭打ち値 */
-const MAX_BPM = 240;
+const MAX_BPM = BPM_MAX;
 
 /**
  * 練習結果一覧から最新の1件を返す（dateで降順比較）

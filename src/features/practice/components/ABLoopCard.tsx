@@ -20,6 +20,7 @@ import {
 import { Icon } from "@/shared/components/atoms/Icon";
 import { colors } from "@/shared/theme";
 import { formatDuration } from "@/features/practice/lib/formatters";
+import { BPM_MAX, BPM_MIN, isValidBpm } from "@/shared/constants/bpm";
 import type { ABLoop } from "@/shared/types/models";
 import { cardShadowStyle, cardStyle } from "./cardStyle";
 
@@ -56,7 +57,10 @@ export function ABLoopCard({
   const [currentBpm, setCurrentBpm] = useState(String(defaultBpm));
   const [targetBpm, setTargetBpm] = useState(String(defaultBpm + 20));
 
-  const canSavePhrase = abLoop.pointA !== null && abLoop.pointB !== null;
+  const canSavePhrase =
+    abLoop.pointA !== null &&
+    abLoop.pointB !== null &&
+    abLoop.pointA < abLoop.pointB;
 
   const openSaveModal = useCallback(() => {
     setName("");
@@ -72,12 +76,12 @@ export function ABLoopCard({
     }
     const parsedCurrent = parseInt(currentBpm, 10);
     const parsedTarget = parseInt(targetBpm, 10);
-    if (isNaN(parsedCurrent) || parsedCurrent <= 0) {
-      Alert.alert("エラー", "現在のBPMを正しく入力してください");
+    if (!isValidBpm(parsedCurrent)) {
+      Alert.alert("エラー", `現在のBPMは${BPM_MIN}〜${BPM_MAX}の範囲で入力してください`);
       return;
     }
-    if (isNaN(parsedTarget) || parsedTarget <= 0) {
-      Alert.alert("エラー", "目標BPMを正しく入力してください");
+    if (!isValidBpm(parsedTarget)) {
+      Alert.alert("エラー", `目標BPMは${BPM_MIN}〜${BPM_MAX}の範囲で入力してください`);
       return;
     }
     onSavePhrase({
