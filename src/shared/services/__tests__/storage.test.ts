@@ -214,6 +214,31 @@ describe("recordPhraseResult", () => {
     expect((await getPracticePhrases())[0].currentBpm).toBe(80);
   });
 
+  it("到達BPM更新後に結果保存が失敗しても、同じ入力の再実行で完了まで前進する", async () => {
+    await savePracticePhrase(makePhrase("p"));
+    const attempt = { ...makeAttempt("a1", "p"), bpm: 120, result: "ok" as const };
+    const original = AsyncStorage.setItem.bind(AsyncStorage);
+    const setItem = jest
+      .spyOn(AsyncStorage, "setItem")
+      .mockImplementation(async (key, value) => {
+        if (key === STORAGE_KEYS.PHRASE_ATTEMPTS) {
+          setItem.mockImplementation(original);
+          throw new Error("disk full");
+        }
+        return original(key, value);
+      });
+
+    await expect(recordPhraseResult(attempt)).rejects.toThrow("disk full");
+    expect((await getPracticePhrases())[0].currentBpm).toBe(120);
+    expect(await getPhraseAttempts()).toHaveLength(0);
+
+    await recordPhraseResult(attempt);
+
+    expect((await getPracticePhrases())[0].currentBpm).toBe(120);
+    expect((await getPhraseAttempts()).map((a) => a.id)).toEqual(["a1"]);
+    setItem.mockRestore();
+  });
+
   it("削除済みフレーズへの記録は例外にし、孤児の結果を残さない", async () => {
     await expect(
       recordPhraseResult({ ...makeAttempt("a1", "missing"), bpm: 90, result: "ok" }),
