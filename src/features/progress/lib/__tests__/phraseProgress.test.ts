@@ -81,7 +81,7 @@ describe("summarizePhraseProgress", () => {
 
   it("目標BPMが開始BPM以下で未達成なら0を返す", () => {
     const phrase = makePhrase({ currentBpm: 60, targetBpm: 70 });
-    const attempts = [makeAttempt({ bpm: 70 })];
+    const attempts = [makeAttempt({ bpm: 70, result: "ng" })];
     const result = summarizePhraseProgress(phrase, attempts);
     expect(result.progressRatio).toBe(0);
   });

@@ -1,4 +1,8 @@
-import { computeTodayTargetBpm, getLatestAttempt } from "../progression";
+import {
+  computeTodayTargetBpm,
+  getLatestAttempt,
+  resolveCurrentBpm,
+} from "../progression";
 import type { PhraseAttempt } from "@/shared/types/models";
 
 function makeAttempt(overrides: Partial<PhraseAttempt> = {}): PhraseAttempt {
@@ -27,6 +31,24 @@ describe("getLatestAttempt", () => {
     const older = makeAttempt({ id: "old", date: "2026-08-08T00:00:00.000Z" });
     const newer = makeAttempt({ id: "new", date: "2026-08-10T00:00:00.000Z" });
     expect(getLatestAttempt([newer, older])?.id).toBe("new");
+  });
+});
+
+describe("resolveCurrentBpm", () => {
+  it("記録が無ければ保存済みの到達BPMを返す", () => {
+    expect(resolveCurrentBpm(80, [])).toBe(80);
+  });
+
+  it("弾けた記録の最大BPMが保存済みより高ければそちらを採る", () => {
+    const attempts = [
+      makeAttempt({ id: "1", bpm: 120, result: "ok" }),
+      makeAttempt({ id: "2", bpm: 150, result: "ng" }),
+    ];
+    expect(resolveCurrentBpm(80, attempts)).toBe(120);
+  });
+
+  it("弾けた記録が保存済みより低ければ後退しない", () => {
+    expect(resolveCurrentBpm(80, [makeAttempt({ bpm: 60, result: "ok" })])).toBe(80);
   });
 });
 

@@ -114,14 +114,24 @@ async function quarantine(
 
 let writeQueue: Promise<unknown> = Promise.resolve();
 
-/**
- * 全件読み→加工→全件書きの更新を直列化する
- * 同一キーへの並行更新が後勝ちで互いの変更を消さないよう、書き込み系はすべてこれを通す
- */
-function serialized<T>(operation: () => Promise<T>): Promise<T> {
+/** 操作を単一キューの末尾に積む（相互排他のみ。移行の完了確認は行わない） */
+function enqueue<T>(operation: () => Promise<T>): Promise<T> {
   const run = writeQueue.then(operation, operation);
   writeQueue = run.catch(() => undefined);
   return run;
+}
+
+/**
+ * 全件読み→加工→全件書きの更新を直列化する
+ * 同一キーへの並行更新が後勝ちで互いの変更を消さないよう、読み書きはすべてこれを通す。
+ * 移行が未完了なら先に実行し、移行に失敗した場合は操作自体を失敗させる
+ * （未移行データを新スキーマで読んで退避・除去してしまわないため）
+ */
+function serialized<T>(operation: () => Promise<T>): Promise<T> {
+  return enqueue(async () => {
+    await ensureMigratedUnlocked();
+    return operation();
+  });
 }
 
 async function writeList(key: string, list: unknown[]): Promise<void> {
@@ -208,35 +218,32 @@ async function migrateToV2(): Promise<void> {
   );
 }
 
+/** スキーマバージョンを確認し、古ければ移行してバージョンを書く。失敗時は例外を伝播する */
+async function ensureMigratedUnlocked(): Promise<void> {
+  const stored = await AsyncStorage.getItem(STORAGE_KEYS.SCHEMA_VERSION);
+  const version = stored ? Number(stored) : 0;
+  if (version >= SCHEMA_VERSION) return;
+
+  if (version < 2) {
+    await migrateToV2();
+  }
+  await AsyncStorage.setItem(STORAGE_KEYS.SCHEMA_VERSION, String(SCHEMA_VERSION));
+}
+
 /**
  * ストレージのスキーマバージョンを確認し、必要なら移行処理を行う
- * モジュール読み込み時に自動で1回キューへ積まれるため、通常は明示的に呼ぶ必要はない。
- * 失敗してもアプリの起動は妨げない
+ * 読み書きの各操作が実行前に自動で行うため、通常は明示的に呼ぶ必要はない。
+ * 失敗してもアプリの起動は妨げない（その場合、以降の読み書きが失敗して再試行を促す）
  */
 export function migrateIfNeeded(): Promise<void> {
-  return serialized(async () => {
+  return enqueue(async () => {
     try {
-      const stored = await AsyncStorage.getItem(STORAGE_KEYS.SCHEMA_VERSION);
-      const version = stored ? Number(stored) : 0;
-
-      if (version >= SCHEMA_VERSION) return;
-
-      if (version < 2) {
-        await migrateToV2();
-      }
-
-      await AsyncStorage.setItem(
-        STORAGE_KEYS.SCHEMA_VERSION,
-        String(SCHEMA_VERSION)
-      );
+      await ensureMigratedUnlocked();
     } catch (e) {
       console.error("[storage] migrateIfNeededに失敗", e);
     }
   });
 }
-
-// 読み書きはすべて同じ直列キューを通るため、モジュール読み込み時に積めばどの読み出しよりも先に移行が走る
-void migrateIfNeeded();
 
 /** 記録対象のフレーズが存在しない（削除済み）ときの例外 */
 export class PhraseNotFoundError extends Error {
@@ -473,7 +480,9 @@ export function savePhraseAttempt(attempt: PhraseAttempt): Promise<void> {
 /**
  * フレーズ練習の結果を記録し、弾けた場合はフレーズの到達BPMを引き上げる
  * 対象フレーズが無ければ例外にする（削除済みフレーズへの孤児記録を防ぐ）。
- * attemptのIDをキーにした置き換え保存なので、途中で失敗しても同じ入力で再実行できる
+ * attemptのIDをキーにした置き換え保存なので、途中で失敗しても再実行できる。
+ * 結果を先に保存するため、途中失敗で残るのは「記録はあるが到達BPM未更新」の状態だけで、
+ * 読み出し側はresolveCurrentBpmで記録から到達BPMを補って整合させる
  * @param attempt - 記録する練習結果
  */
 export function recordPhraseResult(attempt: PhraseAttempt): Promise<void> {
@@ -484,13 +493,12 @@ export function recordPhraseResult(attempt: PhraseAttempt): Promise<void> {
       throw new PhraseNotFoundError();
     }
 
-    // 到達BPMを先に更新する。attemptだけ残ると「弾けた記録があるのに到達BPMが低い」状態になるため
+    await savePhraseAttemptUnlocked(attempt);
     if (attempt.result === "ok" && phrase.currentBpm < attempt.bpm) {
       await updatePracticePhraseUnlocked(phrase.id, {
         currentBpm: attempt.bpm,
         updatedAt: attempt.date,
       });
     }
-    await savePhraseAttemptUnlocked(attempt);
   });
 }

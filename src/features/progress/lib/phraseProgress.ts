@@ -1,4 +1,5 @@
 import type { PhraseAttempt, PracticePhrase } from "@/shared/types/models";
+import { resolveCurrentBpm } from "@/features/practice/lib/progression";
 
 /** フレーズ1件分のBPM推移サマリ */
 export interface PhraseProgressSummary {
@@ -26,7 +27,7 @@ export function summarizePhraseProgress(
     (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
   );
   const startBpm = sorted[0]?.bpm ?? phrase.currentBpm;
-  const currentBpm = phrase.currentBpm;
+  const currentBpm = resolveCurrentBpm(phrase.currentBpm, attempts);
   const targetBpm = phrase.targetBpm;
   const span = targetBpm - startBpm;
   const progressRatio =

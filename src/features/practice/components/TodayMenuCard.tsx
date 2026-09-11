@@ -16,6 +16,7 @@ import { useDeletePracticePhrase } from "@/features/practice/api/useDeletePracti
 import { usePracticeStore } from "@/stores/practice";
 import {
   computeTodayTargetBpm,
+  resolveCurrentBpm,
   getLatestAttempt,
 } from "@/features/practice/lib/progression";
 import type { PracticePhrase } from "@/shared/types/models";
@@ -43,7 +44,7 @@ export function TodayMenuCard({ onStartPhrase, onTryPreset }: Props) {
         );
         const latest = getLatestAttempt(phraseAttempts);
         const todayTargetBpm = computeTodayTargetBpm(
-          phrase.currentBpm,
+          resolveCurrentBpm(phrase.currentBpm, phraseAttempts),
           latest,
           phrase.targetBpm,
         );

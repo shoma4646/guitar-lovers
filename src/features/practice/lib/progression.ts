@@ -18,6 +18,25 @@ export function getLatestAttempt(
 }
 
 /**
+ * 記録を加味した到達BPMを返す
+ *
+ * 結果の保存と到達BPMの更新は別々の書き込みなので、記録だけ残って到達BPMが
+ * 未更新の状態がありうる。「弾けた」記録の最大BPMと保存済みの到達BPMの大きい方を採る
+ * @param currentBpm - フレーズに保存されている到達BPM
+ * @param attempts - 対象フレーズの練習結果一覧
+ */
+export function resolveCurrentBpm(
+  currentBpm: number,
+  attempts: PhraseAttempt[],
+): number {
+  return attempts.reduce(
+    (max, attempt) =>
+      attempt.result === "ok" && attempt.bpm > max ? attempt.bpm : max,
+    currentBpm,
+  );
+}
+
+/**
  * 今日の目標BPMを計算する
  *
  * 直近の結果が到達BPM以上のテンポで「弾けた（ok）」なら到達BPMから+5。
