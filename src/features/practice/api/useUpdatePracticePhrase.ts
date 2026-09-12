@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { updatePracticePhrase } from "@/shared/services/storage";
 import type { PracticePhrase } from "@/shared/types/models";
+import { showMutationError } from "@/shared/lib/showMutationError";
 import { practicePhrasesQueryKey } from "./usePracticePhrases";
 
 type UpdateArgs = {
@@ -16,5 +17,6 @@ export function useUpdatePracticePhrase() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: practicePhrasesQueryKey });
     },
+    onError: showMutationError,
   });
 }

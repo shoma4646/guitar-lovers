@@ -41,6 +41,7 @@ export function FavoritesTab() {
   const { data: favorites = [] } = useFavoriteVideos();
   const { data: recents = [] } = useRecentVideos();
   const loadVideo = usePracticeStore((s) => s.loadVideo);
+  const setPracticeSubTab = usePracticeStore((s) => s.setPracticeSubTab);
   const { mutateAsync: toggleFavorite } = useToggleFavoriteVideo();
 
   const handleToggleFavorite = useCallback(
@@ -64,13 +65,19 @@ export function FavoritesTab() {
   );
 
   const handlePlayRecent = useCallback(
-    (video: RecentVideo) => loadVideo(video.videoId, video.title),
-    [loadVideo],
+    (video: RecentVideo) => {
+      loadVideo(video.videoId, video.title);
+      setPracticeSubTab("practice");
+    },
+    [loadVideo, setPracticeSubTab],
   );
 
   const handlePlayFavorite = useCallback(
-    (video: FavoriteVideo) => loadVideo(video.videoId, video.title),
-    [loadVideo],
+    (video: FavoriteVideo) => {
+      loadVideo(video.videoId, video.title);
+      setPracticeSubTab("practice");
+    },
+    [loadVideo, setPracticeSubTab],
   );
 
   return (

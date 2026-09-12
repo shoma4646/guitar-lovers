@@ -1,11 +1,12 @@
 import { z } from "zod";
+import { BPM_MAX, BPM_MIN } from "@/shared/constants/bpm";
 
 /** フレーズ練習結果のZodスキーマ。AsyncStorage復元値をパースする */
 export const phraseAttemptSchema = z.object({
   id: z.string(),
   phraseId: z.string(),
-  date: z.string(),
-  bpm: z.number().positive(),
+  date: z.iso.datetime(),
+  bpm: z.number().int().min(BPM_MIN).max(BPM_MAX),
   result: z.enum(["ok", "partial", "ng"]),
 });
 

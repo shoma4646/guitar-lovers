@@ -7,10 +7,21 @@
  */
 
 import { useEffect, useState } from "react";
-import { View, Text, TextInput, Pressable, Modal, StyleSheet } from "react-native";
+import {
+  View,
+  Text,
+  TextInput,
+  Pressable,
+  Modal,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  StyleSheet,
+} from "react-native";
 import { Icon } from "@/shared/components/atoms/Icon";
 import { colors } from "@/shared/theme";
 import type { PhraseAttempt, PracticePhrase } from "@/shared/types/models";
+import { BPM_MAX, BPM_MIN, isValidBpm } from "@/shared/constants/bpm";
 
 type Result = PhraseAttempt["result"];
 
@@ -50,12 +61,19 @@ export function PhraseResultSheet({
 
   const handleSubmit = () => {
     const bpm = parseInt(bpmText, 10);
-    onSubmit({ bpm: isNaN(bpm) || bpm <= 0 ? todayTargetBpm : bpm, result });
+    if (!isValidBpm(bpm)) {
+      Alert.alert("エラー", `BPMは${BPM_MIN}〜${BPM_MAX}の範囲で入力してください`);
+      return;
+    }
+    onSubmit({ bpm, result });
   };
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <View style={styles.overlay}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        style={styles.overlay}
+      >
         <View className="bg-surface-container-lowest" style={styles.sheet}>
           <View className="flex-row items-center justify-between">
             <Text
@@ -157,7 +175,7 @@ export function PhraseResultSheet({
             </Text>
           </Pressable>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

@@ -11,26 +11,29 @@
  * このスクリーンは表示構造のみを担当する。
  */
 
-import React, { useState } from "react";
+import React from "react";
 import { View, Text, Pressable, ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useRouter } from "expo-router";
 import { Icon } from "@/shared/components/atoms/Icon";
 import { colors } from "@/shared/theme";
 import { ErrorBoundary } from "@/shared/components/molecules/ErrorBoundary";
+import { usePracticeStore, type PracticeSubTab } from "@/stores/practice";
 import { PracticeTab } from "@/features/practice/components/PracticeTab";
 import { PresetsTab } from "@/features/practice/components/PresetsTab";
 import { FavoritesTab } from "@/features/practice/components/FavoritesTab";
 
-type TabKey = "practice" | "presets" | "favorites";
-
-const TABS: { key: TabKey; label: string }[] = [
+const TABS: { key: PracticeSubTab; label: string }[] = [
   { key: "practice", label: "練習" },
   { key: "presets", label: "プリセット" },
   { key: "favorites", label: "お気に入り" },
 ];
 
 export function PracticeScreen() {
-  const [activeTab, setActiveTab] = useState<TabKey>("practice");
+  // Presets/Favoritesからの再生後に「練習」サブタブへ戻すため、ストアで保持する
+  const activeTab = usePracticeStore((s) => s.practiceSubTab);
+  const setActiveTab = usePracticeStore((s) => s.setPracticeSubTab);
+  const router = useRouter();
 
   return (
     <ErrorBoundary>
@@ -43,7 +46,13 @@ export function PracticeScreen() {
           <Text className="font-bold text-headline-lg text-on-surface">
             Guitar Lovers
           </Text>
-          <Pressable className="active:opacity-70" hitSlop={8}>
+          <Pressable
+            onPress={() => router.push("/settings")}
+            className="active:opacity-70"
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="設定を開く"
+          >
             <Icon name="settings" size={24} color={colors.primary} />
           </Pressable>
         </View>

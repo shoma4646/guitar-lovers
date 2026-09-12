@@ -6,6 +6,8 @@ import {
   Modal,
   TextInput,
   Alert,
+  KeyboardAvoidingView,
+  Platform,
   StyleSheet,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
@@ -55,7 +57,10 @@ export function AddSessionModal({ visible, onClose, onSave }: Props) {
       transparent
       onRequestClose={handleClose}
     >
-      <View style={styles.overlay}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        style={styles.overlay}
+      >
         <View style={styles.sheet}>
           <View style={styles.header}>
             <Text style={styles.title}>練習を記録</Text>
@@ -100,7 +105,7 @@ export function AddSessionModal({ visible, onClose, onSave }: Props) {
             <Text style={styles.saveButtonText}>記録する</Text>
           </TouchableOpacity>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

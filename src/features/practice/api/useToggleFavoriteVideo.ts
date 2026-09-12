@@ -4,6 +4,7 @@ import {
   removeFavoriteVideo,
 } from "@/shared/services/storage";
 import type { FavoriteVideo } from "@/shared/types/models";
+import { showMutationError } from "@/shared/lib/showMutationError";
 import { favoriteVideosQueryKey } from "./useFavoriteVideos";
 
 type ToggleArgs =
@@ -24,5 +25,6 @@ export function useToggleFavoriteVideo() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: favoriteVideosQueryKey });
     },
+    onError: showMutationError,
   });
 }

@@ -3,7 +3,7 @@ import { phraseAttemptsSchema } from "../phraseAttempt";
 describe("phraseAttemptsSchema", () => {
   it("正しいデータで通る", () => {
     const data = [
-      { id: "a", phraseId: "p1", date: "2026-08-10", bpm: 75, result: "ok" },
+      { id: "a", phraseId: "p1", date: "2026-08-10T00:00:00.000Z", bpm: 75, result: "ok" },
     ];
     const result = phraseAttemptsSchema.safeParse(data);
     expect(result.success).toBe(true);
@@ -11,7 +11,7 @@ describe("phraseAttemptsSchema", () => {
 
   it("resultが不正な値のときは失敗する", () => {
     const data = [
-      { id: "a", phraseId: "p1", date: "2026-08-10", bpm: 75, result: "good" },
+      { id: "a", phraseId: "p1", date: "2026-08-10T00:00:00.000Z", bpm: 75, result: "good" },
     ];
     const result = phraseAttemptsSchema.safeParse(data);
     expect(result.success).toBe(false);
@@ -19,10 +19,25 @@ describe("phraseAttemptsSchema", () => {
 
   it("bpmが0以下のときは失敗する", () => {
     const data = [
-      { id: "a", phraseId: "p1", date: "2026-08-10", bpm: 0, result: "ok" },
+      { id: "a", phraseId: "p1", date: "2026-08-10T00:00:00.000Z", bpm: 0, result: "ok" },
     ];
     const result = phraseAttemptsSchema.safeParse(data);
     expect(result.success).toBe(false);
+  });
+
+  it("bpmが240を超えるときは失敗する", () => {
+    const data = [
+      { id: "a", phraseId: "p1", date: "2026-08-10T00:00:00.000Z", bpm: 241, result: "ok" },
+    ];
+    const result = phraseAttemptsSchema.safeParse(data);
+    expect(result.success).toBe(false);
+  });
+
+  it("dateがISO 8601日時でないときは失敗する", () => {
+    const data = [
+      { id: "a", phraseId: "p1", date: "2026-08-10", bpm: 75, result: "ok" },
+    ];
+    expect(phraseAttemptsSchema.safeParse(data).success).toBe(false);
   });
 
   it("空配列は通る", () => {

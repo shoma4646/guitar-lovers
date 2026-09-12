@@ -5,14 +5,18 @@
  * 各フレーズの「前回BPM → 今日の目標BPM」を表示する。行タップで練習を再開する。
  */
 
-import { useMemo } from "react";
-import { View, Text, Pressable, ActivityIndicator } from "react-native";
+import { useCallback, useMemo } from "react";
+import { View, Text, Pressable, ActivityIndicator, Alert } from "react-native";
 import { Icon } from "@/shared/components/atoms/Icon";
 import { colors } from "@/shared/theme";
 import { usePracticePhrases } from "@/features/practice/api/usePracticePhrases";
 import { usePhraseAttempts } from "@/features/practice/api/usePhraseAttempts";
+import { useArchivePracticePhrase } from "@/features/practice/api/useArchivePracticePhrase";
+import { useDeletePracticePhrase } from "@/features/practice/api/useDeletePracticePhrase";
+import { usePracticeStore } from "@/stores/practice";
 import {
   computeTodayTargetBpm,
+  resolveCurrentBpm,
   getLatestAttempt,
 } from "@/features/practice/lib/progression";
 import type { PracticePhrase } from "@/shared/types/models";
@@ -20,11 +24,15 @@ import { cardShadowStyle, cardStyle } from "./cardStyle";
 
 type Props = {
   onStartPhrase: (phrase: PracticePhrase, todayTargetBpm: number) => void;
+  /** 空状態でサンプル動画から練習を試すためのコールバック */
+  onTryPreset: () => void;
 };
 
-export function TodayMenuCard({ onStartPhrase }: Props) {
+export function TodayMenuCard({ onStartPhrase, onTryPreset }: Props) {
   const { data: phrases, isLoading: isLoadingPhrases } = usePracticePhrases();
   const { data: attempts, isLoading: isLoadingAttempts } = usePhraseAttempts();
+  const { mutate: archivePhrase } = useArchivePracticePhrase();
+  const { mutate: deletePhrase } = useDeletePracticePhrase();
 
   const menuItems = useMemo(() => {
     if (!phrases) return [];
@@ -35,12 +43,70 @@ export function TodayMenuCard({ onStartPhrase }: Props) {
           (a) => a.phraseId === phrase.id,
         );
         const latest = getLatestAttempt(phraseAttempts);
-        const todayTargetBpm = computeTodayTargetBpm(phrase.currentBpm, latest);
+        const todayTargetBpm = computeTodayTargetBpm(
+          resolveCurrentBpm(phrase.currentBpm, phraseAttempts),
+          latest,
+          phrase.targetBpm,
+        );
         return { phrase, latest, todayTargetBpm };
       });
   }, [phrases, attempts]);
 
   const isLoading = isLoadingPhrases || isLoadingAttempts;
+
+  const activePhraseId = usePracticeStore(
+    (s) => s.activePhrasePractice?.phrase.id ?? null,
+  );
+  const setActivePhrasePractice = usePracticeStore((s) => s.setActivePhrasePractice);
+
+  // 練習中のフレーズを消したら、結果が消えたフレーズへ記録されないよう練習中状態も解除する
+  const clearIfActive = useCallback(
+    (phraseId: string) => {
+      if (activePhraseId === phraseId) {
+        setActivePhrasePractice(null);
+      }
+    },
+    [activePhraseId, setActivePhrasePractice],
+  );
+
+  const handleLongPress = useCallback(
+    (phrase: PracticePhrase) => {
+      Alert.alert(phrase.name, "このフレーズをどうしますか？", [
+        {
+          text: "アーカイブ",
+          onPress: () =>
+            Alert.alert(
+              "アーカイブの確認",
+              `「${phrase.name}」を練習メニューと進捗一覧から外します。記録は残りますが、アプリ内で元に戻す操作は現在ありません。`,
+              [
+                { text: "キャンセル", style: "cancel" },
+                {
+                  text: "アーカイブする",
+                  onPress: () =>
+                    archivePhrase(phrase.id, { onSuccess: () => clearIfActive(phrase.id) }),
+                },
+              ],
+            ),
+        },
+        {
+          text: "削除",
+          style: "destructive",
+          onPress: () =>
+            Alert.alert("削除の確認", `「${phrase.name}」を削除します。この操作は取り消せません。`, [
+              { text: "キャンセル", style: "cancel" },
+              {
+                text: "削除する",
+                style: "destructive",
+                onPress: () =>
+                  deletePhrase(phrase.id, { onSuccess: () => clearIfActive(phrase.id) }),
+              },
+            ]),
+        },
+        { text: "キャンセル", style: "cancel" },
+      ]);
+    },
+    [archivePhrase, deletePhrase, clearIfActive],
+  );
 
   return (
     <View
@@ -57,18 +123,38 @@ export function TodayMenuCard({ onStartPhrase }: Props) {
       {isLoading ? (
         <ActivityIndicator color={colors.primary} />
       ) : menuItems.length === 0 ? (
-        <Text
-          className="text-on-surface-variant text-body-md"
-          style={{ paddingVertical: 8 }}
-        >
-          まだフレーズがありません。動画でA点・B点を設定し、「フレーズとして保存」から追加してください。
-        </Text>
+        <View style={{ gap: 12, paddingVertical: 8 }}>
+          <Text className="text-on-surface-variant text-body-md">
+            1. 動画を読み込む → 2. 区間のA点・B点を決める → 3.「フレーズとして保存」
+          </Text>
+          <Pressable
+            onPress={onTryPreset}
+            className="items-center active:opacity-90"
+            style={{
+              alignSelf: "flex-start",
+              paddingHorizontal: 20,
+              paddingVertical: 10,
+              borderRadius: 9999,
+              backgroundColor: colors.primary,
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="サンプル動画で試す"
+          >
+            <Text
+              className="text-label-sm"
+              style={{ color: colors.onPrimary, fontWeight: "700" }}
+            >
+              サンプル動画で試す
+            </Text>
+          </Pressable>
+        </View>
       ) : (
         <View style={{ gap: 8 }}>
           {menuItems.map(({ phrase, latest, todayTargetBpm }) => (
             <Pressable
               key={phrase.id}
               onPress={() => onStartPhrase(phrase, todayTargetBpm)}
+              onLongPress={() => handleLongPress(phrase)}
               className="flex-row items-center active:opacity-80"
               style={{
                 paddingHorizontal: 16,
@@ -79,6 +165,7 @@ export function TodayMenuCard({ onStartPhrase }: Props) {
               }}
               accessibilityRole="button"
               accessibilityLabel={`${phrase.name}の練習を開始`}
+              accessibilityHint="長押しでアーカイブ・削除"
             >
               <View
                 className="items-center justify-center"

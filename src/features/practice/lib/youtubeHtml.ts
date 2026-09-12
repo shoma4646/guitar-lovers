@@ -31,15 +31,20 @@ export function buildYouTubeHtml(
   <script>
     var tag = document.createElement('script');
     tag.src = 'https://www.youtube.com/iframe_api';
+    // オフライン時はscriptの読み込み自体が失敗しonErrorが発火しないため、ここで通知する
+    tag.onerror = function() {
+      window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'error', code: -1 }));
+    };
     document.head.appendChild(tag);
     var player;
     function onYouTubeIframeAPIReady() {
       player = new YT.Player('player', {
         videoId: '${safeId}',
-        playerVars: { playsinline: 1, start: ${safeStart} },
+        playerVars: { playsinline: 1, start: ${safeStart}, autoplay: 1 },
         events: {
           onReady: function(e) {
             e.target.setPlaybackRate(${safeRate});
+            e.target.playVideo();
             window.ReactNativeWebView.postMessage(JSON.stringify({
               type: 'ready', duration: e.target.getDuration()
             }));
@@ -50,6 +55,11 @@ export function buildYouTubeHtml(
                 }));
               }
             }, 200);
+          },
+          onError: function(e) {
+            window.ReactNativeWebView.postMessage(JSON.stringify({
+              type: 'error', code: e.data
+            }));
           }
         }
       });

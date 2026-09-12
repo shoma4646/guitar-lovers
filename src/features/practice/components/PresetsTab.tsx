@@ -24,6 +24,7 @@ import { CATEGORY_LABELS } from "@/features/practice/lib/formatters";
 
 export function PresetsTab() {
   const loadVideo = usePracticeStore((s) => s.loadVideo);
+  const setPracticeSubTab = usePracticeStore((s) => s.setPracticeSubTab);
   const { data: presets = [] } = useVideoPresets();
   const { mutate: addRecent } = useAddRecentVideo();
 
@@ -45,8 +46,9 @@ export function PresetsTab() {
         title: preset.title,
         lastWatchedAt: new Date().toISOString(),
       });
+      setPracticeSubTab("practice");
     },
-    [loadVideo, addRecent],
+    [loadVideo, addRecent, setPracticeSubTab],
   );
 
   return (

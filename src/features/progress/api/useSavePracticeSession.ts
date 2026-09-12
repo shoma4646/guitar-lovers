@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { savePracticeSession } from "@/shared/services/storage";
 import type { PracticeSession } from "@/shared/types/models";
+import { showMutationError } from "@/shared/lib/showMutationError";
 import { practiceSessionsQueryKey } from "./usePracticeSessions";
 
 /** 練習セッションをAsyncStorageに保存する */
@@ -11,5 +12,6 @@ export function useSavePracticeSession() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: practiceSessionsQueryKey });
     },
+    onError: showMutationError,
   });
 }

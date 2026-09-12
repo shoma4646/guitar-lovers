@@ -1,0 +1,42 @@
+# プライバシーポリシー
+
+公開URL: https://shoma4646.github.io/guitar_lovers/privacy.html（gh-pagesブランチにHTML化して配置する）
+
+Guitar Lovers（以下「本アプリ」）は、YouTubeの動画を使ったギターのフレーズ練習を支援するアプリです。本ポリシーは、本アプリが取り扱う情報について説明します。
+
+## 収集する情報
+
+本アプリは、練習フレーズ・BPM・練習記録などのデータを**端末内のAsyncStorageにのみ保存**します。これらのデータを開発者や第三者のサーバーへ送信することはありません。
+
+本アプリ自体はアカウント登録や個人情報の入力を求めません。
+
+## YouTube API Servicesの利用
+
+本アプリは、動画の再生に**YouTube API Services**（YouTube IFrame Player API）を使用しています。これにより、以下が適用されます。
+
+- 本アプリの利用は[YouTube利用規約](https://www.youtube.com/t/terms)に同意したものとみなされます
+- 埋め込みプレイヤーの表示・再生に伴い、YouTube/Googleが Cookie 等を通じてデバイスレベルの情報（視聴状況、デバイス情報等）を取得する場合があります。これはYouTube/Googleによる収集であり、本アプリが収集・保存するものではありません
+- YouTube/Googleによるデータの取り扱いについては、[Googleプライバシーポリシー](https://www.google.com/policies/privacy)をご確認ください
+
+本アプリは、YouTube公式のIFrame Player APIが公開している再生制御メソッド（`playVideo`、`pauseVideo`、`seekTo`による区間再生、`setPlaybackRate`による再生速度変更、`getCurrentTime`と`getDuration`による再生位置の取得）のみを使用しており、動画のダウンロードや標準コントロール・ブランディングの改変は行いません。
+
+## マイクの利用
+
+本アプリのチューナー機能は、ギターの音をチューニングするためにマイクを使用します。
+
+- マイク音声は**端末内でピッチ検出処理のみ**に使われます
+- 音声データの保存・送信は一切行いません
+
+## データの削除方法
+
+本アプリが端末内に保存するデータ（練習フレーズ、練習記録等）は、**本アプリを端末から削除することで全て消去**されます。
+
+## お問い合わせ
+
+本ポリシーに関するご質問は、以下までご連絡ください。
+
+- メール: REPLACE_WITH_CONTACT_EMAIL
+
+## 改定履歴
+
+- 2026-09-11: 初版作成
